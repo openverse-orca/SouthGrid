@@ -9,7 +9,7 @@ adb reverse tcp:8001 tcp:8001 || true
 OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot_strip.py \
     --task_config example.yaml \
     --agent_name g1_pick_southgrid_usda_1 \
-    --lerobot_out "${1:-$HOME/orca_m/OrcaManipulation/L_dataset/g1_osc_strip}" \
+    --lerobot_out "${1:-$HOME/southgrid_datasets/g1_osc}" \
     --repo_id local/g1_pick_osc_strip \
     --task "按红色按钮" \
     --fps 20 --clock wall \
