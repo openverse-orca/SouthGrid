@@ -30,7 +30,7 @@
 1. 请勾选 **UseNvEnc**。
 2. 请勾选 **Color Camera**。
 3. 请将 **Color Port** 改为上表中对应的端口号。
-4. 三路全部配完后，再统一勾选 **Recording**。
+4. 三路全部配完后，再统一勾选 **IsRecording**。
 
 ### 启动仿真
 
