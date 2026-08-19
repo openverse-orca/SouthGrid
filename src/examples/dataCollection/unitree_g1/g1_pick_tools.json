@@ -2,15 +2,15 @@
     "version": "3.0",
     "viewport_camera_transform": {
         "position": [
-            19.41097640991211,
-            -24.1414852142334,
-            2.444553852081299
+            19.96070098876953,
+            -23.915742874145508,
+            1.903012752532959
         ],
         "rotation": [
-            0.6506158590761653,
-            -0.3070306721908255,
-            0.29642560536971785,
-            -0.6281425242202837
+            0.6290191548248341,
+            -0.31637064307888124,
+            0.3190680513366306,
+            -0.6343816656221646
         ]
     },
     "actors": [
@@ -58,8 +58,8 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.21137809753418,
-                                    -24.175708770751953,
+                                    20.15137809753418,
+                                    -24.125708770751952,
                                     0.96000075340271
                                 ],
                                 "rotation": [
@@ -105,6 +105,11 @@
                                                 {
                                                     "name": "solref.x",
                                                     "value": 9.999999747378752e-05,
+                                                    "type": "float"
+                                                },
+                                                {
+                                                    "name": "friction.z",
+                                                    "value": 10,
                                                     "type": "float"
                                                 }
                                             ]
@@ -746,8 +751,8 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.355192184448242,
-                                    -24.180391311645508,
+                                    20.295192184448243,
+                                    -24.130391311645507,
                                     0.96000075340271
                                 ],
                                 "rotation": [
@@ -799,6 +804,11 @@
                                                     "name": "solref.x",
                                                     "value": 9.999999747378752e-05,
                                                     "type": "float"
+                                                },
+                                                {
+                                                    "name": "friction.z",
+                                                    "value": 0.01,
+                                                    "type": "float"
                                                 }
                                             ]
                                         }
@@ -833,9 +843,9 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.205236434936523,
-                                    -24.310592651367188,
-                                    1.007308006286621
+                                    20.149747848510742,
+                                    -24.14272117614746,
+                                    1.0073082447052002
                                 ],
                                 "rotation": [
                                     0.5000004768370445,
@@ -843,7 +853,7 @@
                                     0.4999999999998863,
                                     -0.4999995231627281
                                 ],
-                                "scale": 1.0
+                                "scale": 0.8999999761581421
                             },
                             "asset_path": "assets/e071469a36d3c8aa/southgrid_competetion_2026/csg_robotcompetition_2026/props/flashlight/flashlight",
                             "entity_overrides": [
@@ -871,6 +881,21 @@
                                             "type_id": "{39E400EC-2015-416D-8483-3C64041787A5}",
                                             "type_index": 0,
                                             "property_overrides": [
+                                                {
+                                                    "name": "condim",
+                                                    "value": 6,
+                                                    "type": "int"
+                                                },
+                                                {
+                                                    "name": "friction.x",
+                                                    "value": 2.0,
+                                                    "type": "float"
+                                                },
+                                                {
+                                                    "name": "friction.z",
+                                                    "value": 0.01,
+                                                    "type": "float"
+                                                },
                                                 {
                                                     "name": "solimp.x",
                                                     "value": 0.9800000190734863,
@@ -914,6 +939,21 @@
                                             "type_id": "{39E400EC-2015-416D-8483-3C64041787A5}",
                                             "type_index": 0,
                                             "property_overrides": [
+                                                {
+                                                    "name": "condim",
+                                                    "value": 6,
+                                                    "type": "int"
+                                                },
+                                                {
+                                                    "name": "friction.x",
+                                                    "value": 1.0,
+                                                    "type": "float"
+                                                },
+                                                {
+                                                    "name": "friction.z",
+                                                    "value": 0.01,
+                                                    "type": "float"
+                                                },
                                                 {
                                                     "name": "solimp.x",
                                                     "value": 0.9800000190734863,
@@ -958,6 +998,21 @@
                                             "type_index": 0,
                                             "property_overrides": [
                                                 {
+                                                    "name": "condim",
+                                                    "value": 6,
+                                                    "type": "int"
+                                                },
+                                                {
+                                                    "name": "friction.x",
+                                                    "value": 1.0,
+                                                    "type": "float"
+                                                },
+                                                {
+                                                    "name": "friction.z",
+                                                    "value": 0.01,
+                                                    "type": "float"
+                                                },
+                                                {
                                                     "name": "solimp.x",
                                                     "value": 0.9800000190734863,
                                                     "type": "float"
@@ -1000,6 +1055,21 @@
                                             "type_id": "{39E400EC-2015-416D-8483-3C64041787A5}",
                                             "type_index": 0,
                                             "property_overrides": [
+                                                {
+                                                    "name": "condim",
+                                                    "value": 6,
+                                                    "type": "int"
+                                                },
+                                                {
+                                                    "name": "friction.x",
+                                                    "value": 1.0,
+                                                    "type": "float"
+                                                },
+                                                {
+                                                    "name": "friction.z",
+                                                    "value": 0.01,
+                                                    "type": "float"
+                                                },
                                                 {
                                                     "name": "solimp.x",
                                                     "value": 0.9800000190734863,
@@ -1047,9 +1117,9 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.28398323059082,
-                                    -24.218852996826172,
-                                    0.998432457447052
+                                    20.223983764648438,
+                                    -23.963130950927734,
+                                    0.9984326958656311
                                 ],
                                 "rotation": [
                                     0.0,
@@ -1057,7 +1127,7 @@
                                     0.7071064533609334,
                                     0.7071071090120096
                                 ],
-                                "scale": 1.0
+                                "scale": 0.8999999761581421
                             },
                             "asset_path": "assets/e071469a36d3c8aa/southgrid_competetion_2026/csg_robotcompetition_2026/props/electriciansknife/electriciansknife01",
                             "entity_overrides": [
@@ -1210,8 +1280,8 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.276628494262695,
-                                    -24.033771514892578,
+                                    20.216629028320312,
+                                    -24.23590660095215,
                                     1.0051084756851196
                                 ],
                                 "rotation": [
@@ -1220,7 +1290,7 @@
                                     -0.7071068407911908,
                                     -0.7071067215818992
                                 ],
-                                "scale": 1.0
+                                "scale": 0.8999999761581421
                             },
                             "asset_path": "assets/e071469a36d3c8aa/southgrid_competetion_2026/csg_robotcompetition_2026/props/spanner/spanner",
                             "entity_overrides": [
@@ -1420,9 +1490,9 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.26752281188965,
-                                    -24.132272720336914,
-                                    1.0104671716690063
+                                    20.21895408630371,
+                                    -24.3361873626709,
+                                    1.010543704032898
                                 ],
                                 "rotation": [
                                     0.5000755879136717,
@@ -1430,7 +1500,7 @@
                                     -0.5000751110765047,
                                     -0.49992440072941025
                                 ],
-                                "scale": 1.0
+                                "scale": 0.8999999761581421
                             },
                             "asset_path": "assets/e071469a36d3c8aa/southgrid_competetion_2026/csg_robotcompetition_2026/props/screwdriver_set/screwdriver",
                             "entity_overrides": [
@@ -1657,7 +1727,7 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.389331817626953,
+                                    20.339331817626952,
                                     -23.693527221679688,
                                     0.9681190252304076
                                 ],
@@ -1667,7 +1737,7 @@
                                     0.0,
                                     0.0
                                 ],
-                                "scale": 1.0
+                                "scale": 0.8
                             },
                             "asset_path": "assets/e071469a36d3c8aa/southgrid_competetion_2026/csg_robotcompetition_2026/props/toolbox/toolbox",
                             "entity_overrides": [
@@ -2243,8 +2313,8 @@
                             "type": "AssetActor",
                             "transform": {
                                 "position": [
-                                    20.2850399017334,
-                                    -24.39008140563965,
+                                    20.225040435791016,
+                                    -24.056079864501953,
                                     0.9975923299789429
                                 ],
                                 "rotation": [
@@ -2253,7 +2323,7 @@
                                     0.0,
                                     0.0
                                 ],
-                                "scale": 1.0
+                                "scale": 0.8999999761581421
                             },
                             "asset_path": "assets/e071469a36d3c8aa/southgrid_competetion_2026/csg_robotcompetition_2026/props/electriciansknife/electriciansknife02",
                             "entity_overrides": [
@@ -2363,36 +2433,317 @@
             "type": "AssetActor",
             "transform": {
                 "position": [
-                    20.239904403686523,
-                    -24.101564407348633,
-                    0.19999997317790985
+                    20.249174118041992,
+                    -23.88215446472168,
+                    0.2026619017124176
                 ],
                 "rotation": [
-                    1.0,
+                    0.9999641510661149,
                     0.0,
                     0.0,
-                    0.0
+                    -0.008467383457975288
                 ],
                 "scale": 1.0
             },
             "asset_path": "assets/cae3c6559556dd4f/default_project/prefabs/g1_pick_usda",
             "entity_overrides": [
                 {
-                    "entity_path": [],
+                    "entity_path": [
+                        {
+                            "name": "mujoco_wrap",
+                            "index": 0
+                        },
+                        {
+                            "name": "rootPrim",
+                            "index": 0
+                        },
+                        {
+                            "name": "pelvis",
+                            "index": 0
+                        },
+                        {
+                            "name": "pelvis",
+                            "index": 0
+                        },
+                        {
+                            "name": "waist_yaw_link_rev_1_0",
+                            "index": 5
+                        },
+                        {
+                            "name": "waist_roll_link_rev_1_0",
+                            "index": 0
+                        },
+                        {
+                            "name": "torso_link_rev_1_0",
+                            "index": 0
+                        },
+                        {
+                            "name": "right_shoulder_pitch_link",
+                            "index": 8
+                        },
+                        {
+                            "name": "right_shoulder_roll_link",
+                            "index": 1
+                        },
+                        {
+                            "name": "right_shoulder_yaw_link",
+                            "index": 1
+                        },
+                        {
+                            "name": "right_elbow_link",
+                            "index": 1
+                        },
+                        {
+                            "name": "right_wrist_roll_link",
+                            "index": 1
+                        },
+                        {
+                            "name": "right_wrist_pitch_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "right_wrist_yaw_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "arm_r_end_link",
+                            "index": 2
+                        },
+                        {
+                            "name": "camera_right_body1",
+                            "index": 4
+                        },
+                        {
+                            "name": "camera_right_body2",
+                            "index": 1
+                        },
+                        {
+                            "name": "cameras",
+                            "index": 1
+                        },
+                        {
+                            "name": "camera_right",
+                            "index": 0
+                        }
+                    ],
                     "group_overrids": [
                         {
-                            "type_id": "{22B10178-39B6-4C12-BB37-77DB45FDD3B6}",
+                            "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
                             "type_index": 0,
                             "property_overrides": [
                                 {
-                                    "name": "translate.x",
-                                    "value": 20.239904403686523,
+                                    "name": "NearClipDistance",
+                                    "value": 0.0010000000474974513,
                                     "type": "float"
                                 },
                                 {
-                                    "name": "translate.y",
-                                    "value": -24.101564407348633,
+                                    "name": "ColorCamera",
+                                    "value": true,
+                                    "type": "bool"
+                                },
+                                {
+                                    "name": "UseNvEnc",
+                                    "value": true,
+                                    "type": "bool"
+                                },
+                                {
+                                    "name": "ColorPort",
+                                    "value": 7080,
+                                    "type": "int"
+                                },
+                                {
+                                    "name": "Enable",
+                                    "value": true,
+                                    "type": "bool"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "entity_path": [
+                        {
+                            "name": "mujoco_wrap",
+                            "index": 0
+                        },
+                        {
+                            "name": "rootPrim",
+                            "index": 0
+                        },
+                        {
+                            "name": "pelvis",
+                            "index": 0
+                        },
+                        {
+                            "name": "pelvis",
+                            "index": 0
+                        },
+                        {
+                            "name": "waist_yaw_link_rev_1_0",
+                            "index": 5
+                        },
+                        {
+                            "name": "waist_roll_link_rev_1_0",
+                            "index": 0
+                        },
+                        {
+                            "name": "torso_link_rev_1_0",
+                            "index": 0
+                        },
+                        {
+                            "name": "left_shoulder_pitch_link",
+                            "index": 2
+                        },
+                        {
+                            "name": "left_shoulder_roll_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "left_shoulder_yaw_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "left_elbow_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "left_wrist_roll_link",
+                            "index": 2
+                        },
+                        {
+                            "name": "left_wrist_pitch_link",
+                            "index": 1
+                        },
+                        {
+                            "name": "left_wrist_yaw_link",
+                            "index": 2
+                        },
+                        {
+                            "name": "arm_l_end_link",
+                            "index": 1
+                        },
+                        {
+                            "name": "camera_left_body1",
+                            "index": 3
+                        },
+                        {
+                            "name": "camera_left_body2",
+                            "index": 1
+                        },
+                        {
+                            "name": "cameras",
+                            "index": 1
+                        },
+                        {
+                            "name": "camera_left",
+                            "index": 0
+                        }
+                    ],
+                    "group_overrids": [
+                        {
+                            "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
+                            "type_index": 0,
+                            "property_overrides": [
+                                {
+                                    "name": "NearClipDistance",
+                                    "value": 0.0010000000474974513,
                                     "type": "float"
+                                },
+                                {
+                                    "name": "ColorCamera",
+                                    "value": true,
+                                    "type": "bool"
+                                },
+                                {
+                                    "name": "UseNvEnc",
+                                    "value": true,
+                                    "type": "bool"
+                                },
+                                {
+                                    "name": "Enable",
+                                    "value": true,
+                                    "type": "bool"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "entity_path": [
+                        {
+                            "name": "mujoco_wrap",
+                            "index": 0
+                        },
+                        {
+                            "name": "rootPrim",
+                            "index": 0
+                        },
+                        {
+                            "name": "pelvis",
+                            "index": 0
+                        },
+                        {
+                            "name": "pelvis",
+                            "index": 0
+                        },
+                        {
+                            "name": "waist_yaw_link_rev_1_0",
+                            "index": 5
+                        },
+                        {
+                            "name": "waist_roll_link_rev_1_0",
+                            "index": 0
+                        },
+                        {
+                            "name": "torso_link_rev_1_0",
+                            "index": 0
+                        },
+                        {
+                            "name": "head_camera1",
+                            "index": 0
+                        },
+                        {
+                            "name": "head_camera2",
+                            "index": 1
+                        },
+                        {
+                            "name": "cameras",
+                            "index": 1
+                        },
+                        {
+                            "name": "head_cam",
+                            "index": 0
+                        }
+                    ],
+                    "group_overrids": [
+                        {
+                            "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
+                            "type_index": 0,
+                            "property_overrides": [
+                                {
+                                    "name": "NearClipDistance",
+                                    "value": 0.0010000000474974513,
+                                    "type": "float"
+                                },
+                                {
+                                    "name": "ColorCamera",
+                                    "value": true,
+                                    "type": "bool"
+                                },
+                                {
+                                    "name": "UseNvEnc",
+                                    "value": true,
+                                    "type": "bool"
+                                },
+                                {
+                                    "name": "ColorPort",
+                                    "value": 7090,
+                                    "type": "int"
+                                },
+                                {
+                                    "name": "Enable",
+                                    "value": true,
+                                    "type": "bool"
                                 }
                             ]
                         }
