@@ -1,4 +1,4 @@
-# SouthGrid
+# SouthGrid 南方电网大赛
 
 SouthGrid 为南方电网竞赛场景提供人形机器人数据采集、数据回放与在线推理工具。
 
