@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 路点回放自动采集：不接 Pico，回放 record_waypoints.py 录的 YAML。
-# 请先在 OrcaLab 打开本目录 uni_osc.json 并运行仿真（localhost:50051）。
+# 请先在 OrcaLab 打开本目录 g1_pick_tools.json 并运行仿真（localhost:50051）。
 # 用法: bash run_scripted.sh [输出目录] [集数]
 # 只想先确认动作对不对（不开相机、不写盘）: bash run_scripted.sh --dry
 set -euo pipefail

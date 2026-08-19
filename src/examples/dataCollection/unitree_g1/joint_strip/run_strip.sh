@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 与实测采集 g1_osc_strip2 相同的启动命令。
-# 请先在 OrcaLab 打开本目录 uni_osc.json 并运行仿真（localhost:50051）。
+# 请先在 OrcaLab 打开本目录 g1_pick_tools.json 并运行仿真（localhost:50051）。
 set -euo pipefail
 cd "$(dirname "$0")"
 
