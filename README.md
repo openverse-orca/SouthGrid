@@ -19,7 +19,7 @@ SouthGrid 为南方电网竞赛场景提供人形机器人数据采集、数据�
 - 在 OrcaLab 资产库中订阅下列场景资产：
   - `SouthGrid_Competition_2026`
   - `G1_omnipicker`
-  - `G1_Picker_SouthGrid`
+  - `G1_Pick`
 
 ### 获取代码
 

@@ -10,7 +10,7 @@
 conda activate orcalab_lerobot
 ```
 
-在 OrcaLab 资产库中确认已订阅 `SouthGrid_Competition_2026` 与 `G1_Picker_SouthGrid`，并加载交付任务对应的布局配置后启动仿真。
+在 OrcaLab 资产库中确认已订阅 `SouthGrid_Competition_2026` 与 `G1_Pick`，并加载交付任务对应的布局配置后启动仿真。
 
 ## 相机与遥操作
 
