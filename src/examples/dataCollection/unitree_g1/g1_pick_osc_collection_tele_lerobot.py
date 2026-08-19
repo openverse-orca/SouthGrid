@@ -67,8 +67,8 @@ orca_logger = get_orca_logger(
     force_reinit=True,
 )
 
-# 左臂保持自然下垂的默认姿态，不参与遥操作。
-_L_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 1.5708, 0.0, 0.0, 0.0]
+# 肘→夹爪 与地面法线夹角对齐重力。
+_L_INIT_JOINT_VALUES = [-0.3684, 0.8495, 1.1284, -1.0472, 0.0, 0.0, 0.0]
 _R_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 

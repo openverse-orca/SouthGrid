@@ -22,8 +22,7 @@ l_arm = {
         "left_wrist_pitch_joint",
         "left_wrist_yaw_joint",
     ],
-    # 左臂自然下垂的默认姿态。
-    "neutral_joint_values": [0.0, 0.0, 0.0, 1.5708, 0.0, 0.0, 0.0],
+    "neutral_joint_values": [-0.3684, 0.8495, 1.1284, -1.0472, 0.0, 0.0, 0.0],
     "motors_names": [
         "left_shoulder_pitch_joint_mctrl",
         "left_shoulder_roll_joint_mctrl",

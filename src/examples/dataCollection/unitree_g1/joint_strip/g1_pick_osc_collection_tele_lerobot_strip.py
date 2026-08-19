@@ -70,9 +70,8 @@ orca_logger = get_orca_logger(
     force_reinit=True,
 )
 
-# 左臂侧平举锁定角（shoulder_roll=π/2 外展，elbow≈80° 使整臂水平）；
-# 左臂由 pin_all_joints 物理钉死，不参与遥操。右臂从零位起步。
-_L_INIT_JOINT_VALUES = [0.0, 1.5708, 0.0, 1.40, 0.0, 0.0, 0.0]
+# 肘→夹爪 与地面法线夹角对齐重力（MuJoCo 实测 vsDown≈0°）。
+_L_INIT_JOINT_VALUES = [-0.3684, 0.8495, 1.1284, -1.0472, 0.0, 0.0, 0.0]
 _R_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
