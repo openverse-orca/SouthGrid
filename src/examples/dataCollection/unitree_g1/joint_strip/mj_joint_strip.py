@@ -140,6 +140,51 @@ def bake_dropped_bodies(xml: str, mj, md, drop: set) -> tuple[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
+# 〇、给电柜 button 的 slide 关节加 range 限位，防止按键跑出电柜
+# ---------------------------------------------------------------------------
+_BUTTON_JOINT_TOKENS = ("ElectricalCabinet_Button", "ElectricalCabinet_button")
+
+
+def clamp_button_joints(xml: str, range_max: float = 0.01) -> tuple[str, list[str]]:
+    """给场景中电柜 button 的 slide 关节添加 range 限位 + 硬约束求解参数。
+
+    button 关节是场景物体（非 agent 前缀），属于 foreign，不会被剥离，
+    但原 XML 无 range，按键在 stiffness/damping 较小时可能被外力推出电柜。
+
+    solreflimit="0.001 1"：timeconst=1ms（极快响应）、dampratio=1（临界阻尼），
+    远硬于默认的 0.02 1，constraint solver 会迅速拉回越界 qpos。
+    solimplimit="0.001 0.001 0.001"：dmin≈1e-3，几乎不允许超越 range。
+    """
+    if not _BUTTON_JOINT_TOKENS or range_max <= 0:
+        return xml, []
+
+    def _repl(m):
+        a = _attrs(m.group(2))
+        name = a.get("name", "")
+        if not any(tok in name for tok in _BUTTON_JOINT_TOKENS):
+            return m.group(0)
+        a["range"] = f"0 {range_max}"
+        a["solreflimit"] = "0.001 1"
+        a["solimplimit"] = "0.001 0.001 0.001"
+        parts = [m.group(1)]
+        order = ["name", "type", "axis", "range", "solreflimit", "solimplimit"] + [
+            k for k in a if k not in ("name", "type", "axis", "range",
+                                      "solreflimit", "solimplimit")
+        ]
+        for k in order:
+            parts.append(f' {k}="{a[k]}"')
+        parts.append(m.group(3))
+        return "".join(parts)
+
+    new_xml, n = re.subn(r"(<joint\b)((?:\s+[\w:.-]+\s*=\s*\"[^\"]*\")*)\s*(/?>)", _repl, xml)
+    clamped = []
+    for m in re.finditer(r'<joint\b[^>]*\bname="([^"]+)"', new_xml):
+        if any(tok in m.group(1) for tok in _BUTTON_JOINT_TOKENS):
+            clamped.append(m.group(1))
+    return new_xml, clamped
+
+
+# ---------------------------------------------------------------------------
 # 一、决定删哪些关节
 # ---------------------------------------------------------------------------
 def plan_strip(joint_names, agent_name: str, keep=KEEP_DEFAULT, keep_base: bool = False):
@@ -465,6 +510,9 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
                     f"（左臂平举等静态姿态）")
 
             new_xml, rep = strip_xml(xml, drop)
+            new_xml, clamped_btns = clamp_button_joints(new_xml, range_max=0.001)
+            if clamped_btns:
+                log(f"[STRIP] 已给 {len(clamped_btns)} 个电柜 button 关节加 range=0~0.001 限位")
             import pathlib
             orig = pathlib.Path(orig_path)
             patched = str(orig.with_stem(orig.stem + "_jointstrip"))

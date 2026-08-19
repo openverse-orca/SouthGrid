@@ -1,17 +1,3 @@
-"""G1 Pick OSC VR 遥操作数据采集 —— 非右臂自由度编译期剥离版。
-
-与 g1_pick_osc_collection_tele_lerobot.py 的唯一差别：加了 --joint_strip。
-
-开启后，模型编译前删掉下肢/腰/左臂/左爪的 <joint>（body / geom / camera / site
-全部保留），nq 113→76、nv 104→68，mj_step 不再为这些自由度做积分与约束求解。
-剥离生效时自动跳过 pin_all_joints（freejoint 已不存在，无需也无法再钉）。
-
-qpos 变短后由 mj_joint_strip 在 gym.update_local_env 上挂补全层，推给
-OrcaStudio 的仍是完整长度数组，渲染不受影响。
-
-安全检查不通过会自动回退原始 XML，采集照常，只是没有剥离效果。
-"""
-
 import argparse
 import os
 import sys
@@ -70,9 +56,11 @@ orca_logger = get_orca_logger(
     force_reinit=True,
 )
 
-# 左臂侧平举锁定角（shoulder_roll=π/2 外展，elbow≈80° 使整臂水平）；
-# 左臂由 pin_all_joints 物理钉死，不参与遥操。右臂从零位起步。
-_L_INIT_JOINT_VALUES = [0.0, 1.5708, 0.0, 1.40, 0.0, 0.0, 0.0]
+# 左臂初始姿态：shoulder_roll≈0.127 轻外展，elbow=π/2 弯 90°，其余零位。
+# 剥离模式下保留左臂 <joint>，初次仿真时由 set_default_joint_values 写入此值，
+# 之后左臂不 OSC、不 pin，motor ctrl=0，任重力作用下垂。
+# 非剥离模式下此值仅作瞬时初值，随后被 pin_all_joints 用 neutral_joint_values 覆盖。
+_L_INIT_JOINT_VALUES = [0.0, 0.127, 0.0, 1.5708, 0.0, 0.0, 0.0]
 _R_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
@@ -670,7 +658,7 @@ def main() -> None:
         return bool(d) and name in d
 
     def _obs_callback_safe(env):
-        """剥离后左臂/左爪 joint、actuator 已不存在，缺项填零，保持原 schema。"""
+        """剥离后左爪 joint/actuator 已不存在，缺项填零；左臂保留，读真实 qpos/ctrl。"""
         if env.model.nu == 0:
             return {
                 "/action/end/position": np.zeros((2, 3), dtype=np.float32),
@@ -746,15 +734,15 @@ def main() -> None:
     # 所以补丁打在 OrcaGymLocal 类上而不是 env 实例上。
     strip = None
     if args.joint_strip == "on":
-        bake_qpos = {
-            f"{args.agent_name}_{jn}": float(v)
-            for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], _L_INIT_JOINT_VALUES)
-        }
+        # 保留左臂 <joint>：剥离下肢/腰/左爪，左臂仍参与物理仿真。
+        # 初次由 set_default_joint_values 写入 _L_INIT_JOINT_VALUES 后，
+        # motor ctrl=0 不 OSC、不 pin，任重力作用下垂。
+        keep = mj_joint_strip.KEEP_DEFAULT + tuple(g1_pick_osc_conf.l_arm["joint_names"])
         strip = mj_joint_strip.install(
             None, args.agent_name,
+            keep=keep,
             kill_collision=(args.strip_col == "off"),
             required_cameras=tuple(camera_map.keys()) or ("cam_head",),
-            bake_qpos=bake_qpos,
             log=lambda m: (orca_logger.info(m), print(m, flush=True)),
         )
 
@@ -850,9 +838,10 @@ def main() -> None:
             # 合并单层 mj_step 包装：同时钉死 floating base + 腰部 + 左臂
             # 替代原本 3 层独立包装（每子步触发 3 次 mj_forward，性能下降 3-5 倍）
             if stripped:
-                # 这些自由度在 XML 里已经不存在，body 直接焊在父刚体上，
-                # 无需也无法再用 mjData 注入钉死；顺带省掉每子步的 mj_forward。
-                orca_logger.info("[STRIP] 自由度已在编译期剥离，跳过 pin_all_joints")
+                # base/腰/下肢/左爪的 <joint> 已在编译期剥离，body 焊死无需 pin。
+                # 左臂 <joint> 保留：set_default_joint_values 已写入初始 qpos，
+                # 此处不 pin、不 OSC，motor ctrl=0 任重力作用下垂。
+                orca_logger.info("[STRIP] base/腰/下肢/左爪已剥离焊死，左臂保留自由演化，跳过 pin_all_joints")
             else:
                 orca_logger.info(
                     "Pinning all joints (base + waist + l_arm, single wrapper)"
