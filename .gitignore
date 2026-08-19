@@ -212,3 +212,7 @@ __marimo__/
 
 # Pinocchio reduced-model cache, rebuilt on demand from assets/g1
 /src/examples/dataCollection/_ik_cache/
+
+# Local delivery-maintenance notes
+DOCS_CHECK.md
+TODO.md

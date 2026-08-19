@@ -7,10 +7,8 @@
 #     --no-emit-package numpy --no-emit-package scipy \
 #     --no-emit-package argparse --output-file requirements.txt
 #
-# numpy and scipy are listed so the resolver sees the validated versions, but they
-# are excluded from the lock because Conda owns those builds; scripts/install_runtime.sh
-# refuses to continue unless the Conda builds are already present. Pinocchio and
-# CasADi must never be installed from pip.
+# NumPy and SciPy are listed so the resolver sees the validated versions, but they
+# are excluded from the lock because Conda owns those builds.
 #
 # argparse is excluded because params-proto declares it: on Python 3.12 the PyPI
 # argparse 1.4.0 backport shadows the standard library module and removes
@@ -75,14 +73,3 @@ opencv-python==4.13.0.92
 pyyaml==6.0.3
 termcolor==3.3.0
 typing-extensions==4.15.0
-
-# Vendored TeleVuer and OpenPI client runtime dependencies. The vuer "all" extra
-# is deliberately not used: it pins aiohttp==3.10.5, while the validated stack
-# runs aiohttp 3.13.1. The extra only adds the three packages listed here.
-aiohttp==3.13.1
-aiohttp-cors==0.8.1
-dm-tree==0.1.10
-killport==1.2.0
-msgpack==1.1.2
-vuer==0.0.60
-websockets==16.0

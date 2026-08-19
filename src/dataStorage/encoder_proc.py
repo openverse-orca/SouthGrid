@@ -4,7 +4,7 @@
 从根上消除 avcodec_open2 / cv2.imwrite 对主控制循环的 GIL 阻塞。
 
 启动方式：scoped ``multiprocessing.get_context("forkserver")``，
-不调用全局 ``set_start_method``（TeleVuer 已用默认 fork）。
+不调用全局 ``set_start_method``，避免影响调用方的多进程配置。
 """
 from __future__ import annotations
 

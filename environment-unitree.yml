@@ -1,12 +1,4 @@
-# OrcaManipulation 交付环境的 Conda 二进制基线。
-#
-# 不要用这个文件更新已有环境；请从空环境创建：
-#   conda env create -f environment-unitree.yml
-#   conda activate orcalab_lerobot
-#   bash scripts/install_runtime.sh
-#
-# NumPy / SciPy / Pinocchio / CasADi 由 Conda 独占管理。不得再通过 pip
-# 安装 pin、pinocchio、libpinocchio、casadi、numpy 或 scipy。
+# SouthGrid 运行环境。请从新环境创建，不要更新已有环境。
 
 name: orcalab_lerobot
 channels:
@@ -18,7 +10,3 @@ dependencies:
   - defaults::pip=26.0.1=pyhc872135_1
   - conda-forge::numpy=2.4.6=py312h33ff503_0
   - defaults::scipy=1.15.3=py312h525edd1_0
-  - conda-forge::casadi=3.7.2=py312h5f23809_4
-  - conda-forge::libpinocchio=3.9.0=h1c65005_1
-  - conda-forge::pinocchio-python=3.9.0=py312h5447bb0_1
-  - conda-forge::pinocchio=3.9.0=h7900ff3_1

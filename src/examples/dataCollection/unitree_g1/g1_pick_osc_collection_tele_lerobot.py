@@ -67,9 +67,8 @@ orca_logger = get_orca_logger(
     force_reinit=True,
 )
 
-# 左臂侧平举锁定角（shoulder_roll=π/2 外展，elbow≈80° 使整臂水平）；
-# 左臂由 pin_all_joints 物理钉死，不参与遥操。右臂从零位起步。
-_L_INIT_JOINT_VALUES = [0.0, 1.5708, 0.0, 1.40, 0.0, 0.0, 0.0]
+# 左臂保持自然下垂的默认姿态，不参与遥操作。
+_L_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 1.5708, 0.0, 0.0, 0.0]
 _R_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
@@ -248,11 +247,11 @@ def pin_floating_base(env, agent_name: str) -> bool:
 
 
 def pin_left_arm_joints(env, agent_name: str) -> bool:
-    """硬钉死左臂 7 个 motor 关节到 neutral_joint_values 目标位姿（横展不动）。
+    """将左臂 7 个 motor 关节保持在 neutral_joint_values 默认姿态。
 
     motor 是力矩执行器，ctrl 无法保持位置（ctrl=0 即无力矩），
     必须用 mj_step 包装硬锁 qpos/qvel，同时把 motor ctrl 清零避免力矩干扰。
-    用途：左臂横展定死，让机器人靠近桌子，方便右臂拿放遥操。
+    用途：保持左臂默认姿态，避免遥操作期间产生非预期运动。
     """
     import mujoco
 
@@ -942,7 +941,7 @@ def main() -> None:
     # ── 采集前手臂冻结门控 ───────────────────────────────────────────────────
     # 场景重置后、按左Grip开始采集前，机械臂/夹爪不响应手柄（保持静止）；
     # 仅放行 L_GRIPBUTTON（任务状态：开始/保存）。开始采集(RUNNING)后放行除锁定外按键。
-    # 左臂位姿(L_TRANSFORM)全程锁定：左臂停靠侧平举初值，不响应手柄。
+    # 左臂位姿（L_TRANSFORM）全程锁定，不响应手柄。
     _LOCKED_KEYS: set = {PicoJoystickKey.L_TRANSFORM}
     _all_pico_keys = [k for k in pico_device.keys if k not in _LOCKED_KEYS]
     _pre_start_keys = [k for k in _all_pico_keys if k == PicoJoystickKey.L_GRIPBUTTON]
@@ -969,7 +968,7 @@ def main() -> None:
         print(f"  数据输出: {lerobot_out}", flush=True)
     print("-" * 60, flush=True)
     print("  【操作按键】", flush=True)
-    print("  左臂移动    已锁定（停靠侧平举初值，全程静止）", flush=True)
+    print("  左臂移动    已锁定（保持默认姿态）", flush=True)
     print("  右臂移动    右手柄位姿 (持握激活)", flush=True)
     print("  左夹爪      X / Y 键 或 左扳机", flush=True)
     print("  右夹爪      A / B 键 或 右扳机", flush=True)

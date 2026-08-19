@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""Fail-fast verification for the pinned OrcaManipulation delivery runtime."""
+"""Fail-fast verification for the pinned SouthGrid delivery runtime."""
 
 from __future__ import annotations
 
 import importlib.metadata
 import pathlib
-import re
 import sys
 import tempfile
-
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-G1_ASSETS = REPO_ROOT / "src" / "examples" / "dataCollection" / "assets" / "g1"
-
 
 def _assert_version(distribution: str, expected: str) -> None:
     actual = importlib.metadata.version(distribution)
@@ -26,32 +21,6 @@ def _assert_environment_owned(module) -> None:
         raise RuntimeError(
             f"{module.__name__} loaded outside the active environment: {module_path}"
         )
-
-
-def _verify_unitree_urdf() -> str:
-    """Build the Unitree G1 model the way G1_29_ArmIK does.
-
-    Pinocchio resolves every mesh referenced by the URDF, so a partially vendored
-    asset directory fails here instead of at the start of a collection run.
-    """
-    import pinocchio as pin
-
-    urdf = G1_ASSETS / "g1_body29_hand14.urdf"
-    if not urdf.is_file():
-        raise RuntimeError(f"missing Unitree G1 URDF: {urdf}")
-
-    references = sorted(set(re.findall(r'filename="([^"]+)"', urdf.read_text())))
-    absent = [ref for ref in references if not (G1_ASSETS / ref).is_file()]
-    if absent:
-        raise RuntimeError(
-            f"{len(absent)} of {len(references)} meshes referenced by "
-            f"{urdf.name} are missing, first: {absent[0]}"
-        )
-
-    robot = pin.RobotWrapper.BuildFromURDF(str(urdf), str(G1_ASSETS))
-    if robot.model.nq != 43:
-        raise RuntimeError(f"unexpected G1 model nq: {robot.model.nq}")
-    return f"{urdf.name}, {len(references)} meshes, nq={robot.model.nq}"
 
 
 def main() -> None:
@@ -72,7 +41,6 @@ def main() -> None:
         "torchvision": "0.22.1+cpu",
         "datasets": "3.6.0",
         "lerobot": "0.3.4+orca.1",
-        "televuer": "4.0.0+orca.1",
         "openpi-client": "0.1.0+orca.1",
     }
     for distribution, expected in expected_versions.items():
@@ -87,31 +55,10 @@ def main() -> None:
         raise RuntimeError(f"expected one NumPy distribution, found {len(numpy_distributions)}")
 
     import av
-    import casadi
     import cv2
     import lerobot
     import openpi_client
-    import pinocchio
-    import pinocchio.casadi as cpin
-    import televuer
     from openpi_client import msgpack_numpy
-
-    # The Conda Pinocchio build ships no Python distribution metadata, so these two
-    # are checked through the imported modules instead of importlib.metadata.
-    for module, expected in ((pinocchio, "3.9.0"), (casadi, "3.7.2")):
-        if module.__version__ != expected:
-            raise RuntimeError(
-                f"{module.__name__}: expected {expected}, got {module.__version__}"
-            )
-
-    pin_path = pathlib.Path(pinocchio.__file__).resolve()
-    cpin_path = pathlib.Path(cpin.__file__).resolve()
-    if "cmeel.prefix" in str(pin_path) or "cmeel.prefix" in str(cpin_path):
-        raise RuntimeError(f"unexpected pip/cmeel Pinocchio: {pin_path}")
-
-    _assert_environment_owned(lerobot)
-    _assert_environment_owned(televuer)
-    _assert_environment_owned(openpi_client)
 
     gui_line = next(
         (line for line in cv2.getBuildInformation().splitlines() if "GUI:" in line),
@@ -144,9 +91,7 @@ def main() -> None:
             f"orca-lab requires {_orca_lab_pin!r}, but orca-gym {_orca_gym_version} is installed"
         )
 
-    # orcalab.launcher is the console-script entry point. orcalab.main is avoided on
-    # purpose: importing it runs the PySide6 patcher, which shells out to `python3`
-    # and may install system packages.
+    # Import the launcher entry point to verify that the desktop application is available.
     import orcalab.launcher  # noqa: F401
 
     import numpy as np
@@ -217,16 +162,11 @@ def main() -> None:
         if episode_index != 0 or not parquet.is_file():
             raise RuntimeError("LeRobot data-only episode write failed")
 
-    urdf_summary = _verify_unitree_urdf()
-
     print("Environment verification OK")
     print(f"  Python: {sys.version.split()[0]}")
-    print(f"  Pinocchio: {pinocchio.__version__} ({pin_path})")
-    print(f"  pinocchio.casadi: {cpin_path}")
     print(f"  OpenCV: {gui_line.strip()}")
-    print(f"  Unitree G1 model: {urdf_summary}")
     print(f"  OrcaLab/OrcaGym: {importlib.metadata.version('orca-lab')} / {_orca_gym_version}")
-    print("  LeRobot/OpenPI/TeleVuer: installed from repository-owned sources")
+    print("  LeRobot/OpenPI client: installed from repository-owned sources")
 
 
 if __name__ == "__main__":

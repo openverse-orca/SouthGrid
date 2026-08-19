@@ -11,7 +11,7 @@
 ```
 ┌──────────────────────────────────────────┐      WebSocket :8010
 │  策略服务器（openpi uv 环境）              │ ◄──────────────────────
-│  serve_policy.py / openpi-rtc-serve      │
+│  serve_policy.py      │
 │  需要 GPU（≥8 GB 显存）                   │ ──────────────────────►
 └──────────────────────────────────────────┘
 
@@ -31,7 +31,7 @@
 1. 请在运行本项目的主机上启动 OrcaLab 7.1，并在 OrcaLab 的加载布局对话框中选择与任务对应的布局文件（`src/examples/dataCollection/g1_omnipicker/g1_button.json` 或 `src/examples/dataCollection/g1_omnipicker/g1_tool.json`）。
 2. 请按采集文档配置相机端口并启动仿真（`localhost:50051`）。
 3. 请确认已按仓库根目录 README 的「环境安装」一节执行 `bash scripts/install_runtime.sh`。
-4. 策略服务器需要独立的 **openpi uv 环境**。如尚未完成 openpi 安装与训练，请先阅读 [openpi_deployment.md](openpi_deployment.md) 第 1–8 节，完成环境配置、数据准备与训练。完成后再回到本文执行推理。
+4. 策略服务器需要独立的 **openpi uv 环境**。请先按 [策略服务部署](openpi_deployment.md) 创建独立的 OpenPI 环境，并使用交付任务对应的策略配置和 checkpoint 启动服务。
 
 ---
 
@@ -183,19 +183,4 @@ python eval_g1_omnipicker_tool_lerobot.py \
 
 **现象**：WebSocket 连接失败（远程场景）。**处理**：确认服务器防火墙已放行 8010 端口，或改用 SSH 隧道方案。
 
-**现象**：策略服务器 OOM 或响应慢。**处理**：参见 [openpi_deployment.md § 10](openpi_deployment.md#10-故障排查)。
-
----
-
-## 高级调参参数
-
-以下参数仅出现在工具任务推理脚本中，一般保持默认即可。
-
-| 参数 | 说明 | 默认值 |
-|---|---|---|
-| `--grasp_integral` | 开启近桌外环积分 | 未启用 |
-| `--grasp_integral_ki` | 外环积分增益 | `0.2` |
-| `--grasp_integral_max` | 外环积分偏置限幅，单位米 | `0.010` |
-| `--grasp_integral_axes` | 外环积分生效轴，如 `z` / `xy` / `xyz` | `z` |
-| `--grasp_integral_log_every` | 积分日志节流：每 N 控制步打印一次；`0` 表示关闭 | `10` |
-| `--grasp_integral_z_below` | 仅当策略右臂目标 z 不超过该值时启用外环积分，单位米 | `0.25` |
+**现象**：策略服务器 OOM 或响应慢。**处理**：确认所用 GPU 满足策略服务的显存要求，并检查是否有其他进程占用显存。

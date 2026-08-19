@@ -56,7 +56,7 @@ orca_logger = get_orca_logger(
     force_reinit=True,
 )
 
-# 左臂平举初值（与 scripted_tool / 开发仓 tele 一致）；右臂仍用 conf.neutral。
+# 左臂保持默认姿态；右臂仍用 conf.neutral。
 _L_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
@@ -120,7 +120,7 @@ def main() -> None:
         orca_logger.warning(f"--cam_resolution 格式错误 '{args.cam_resolution}'，使用默认 {DEFAULT_HW}")
         cam_hw_override = DEFAULT_HW
 
-    # ── 关节初值（左臂平举，与 scripted_tool 一致）────────────────────────────
+    # ── 关节初值 ───────────────────────────────────────────────────────────────────────────────────────────
     default_joint_values: dict = {}
     for jn, v in zip(g1_omnipicker_conf.l_arm["joint_names"], _L_INIT_JOINT_VALUES):
         default_joint_values[jn] = v
@@ -474,9 +474,9 @@ def main() -> None:
     # ── 采集前手臂冻结门控 + 左臂锁定 ─────────────────────────────────────────
     # 场景重置后、按左Grip开始采集前，机械臂/夹爪不响应手柄（保持静止）；
     # 仅放行 L_GRIPBUTTON（任务状态：开始/保存）。开始采集(RUNNING)后放行全部按键。
-    # 左臂位姿(L_TRANSFORM)始终锁定：全程不响应手柄，左臂控制器保持复位位姿静止。
+    # 左臂位姿（L_TRANSFORM）始终锁定，不响应手柄。
     # 由于 run_controllers() 每步调用 device.update()，此处覆盖 update 做按键门控。
-    _LOCKED_KEYS = {PicoJoystickKey.L_TRANSFORM}  # 左臂锁定，全程不响应手柄
+    _LOCKED_KEYS = {PicoJoystickKey.L_TRANSFORM}
     _all_pico_keys = [k for k in pico_device.keys if k not in _LOCKED_KEYS]
     _pre_start_keys = [
         k for k in _all_pico_keys if k == PicoJoystickKey.L_GRIPBUTTON
@@ -498,7 +498,7 @@ def main() -> None:
     print(f"  数据输出: {lerobot_out}", flush=True)
     print("-" * 60, flush=True)
     print("  【操作按键】", flush=True)
-    print("  左臂移动    已锁定（停靠平举初值，全程静止）", flush=True)
+    print("  左臂移动    已锁定（保持默认姿态）", flush=True)
     print("  右臂移动    右手柄位姿 (持握激活)", flush=True)
     print("  左夹爪      X / Y 键 或 左扳机", flush=True)
     print("  右夹爪      A / B 键 或 右扳机", flush=True)
