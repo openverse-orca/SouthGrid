@@ -66,6 +66,7 @@ from task.abstract_task import EmptyTask
 
 ENTRY_POINT = "envs.dataCollection.dataCollection_env:DataCollectionEnv"
 STREAM_TRIGGER_PATH = "/tmp/g1_pick_osc_lerobot_stream"
+_L_INIT_JOINT_VALUES = [0.0, 0.127, 0.0, 1.5708, 0.0, 0.0, 0.0]
 
 log_dir = os.path.join(base_dir, "logs")
 
@@ -530,7 +531,7 @@ def main() -> None:
 
     # ── 关节初值（左臂停靠自然下垂，右臂站立位）──────────────────────────────
     default_joint_values: dict = {}
-    for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], tele._L_INIT_JOINT_VALUES):
+    for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], _L_INIT_JOINT_VALUES):
         default_joint_values[jn] = v
     for jn, v in zip(g1_pick_osc_conf.r_arm["joint_names"], tele._R_INIT_JOINT_VALUES):
         default_joint_values[jn] = v
@@ -606,7 +607,7 @@ def main() -> None:
         return bool(d) and name in d
 
     def _obs_callback_safe(env):
-        """剥离后左臂/左爪 joint、actuator 已不存在，缺项填零，保持原 schema。"""
+        """剥离后左爪 joint/actuator 已不存在，缺项填零；左臂保留，读真实 qpos/ctrl。"""
         if env.model.nu == 0:
             return {
                 "/action/end/position": np.zeros((2, 3), dtype=np.float32),
@@ -680,21 +681,13 @@ def main() -> None:
     # ── 自由度剥离：必须在 manager 之前打补丁 ─────────────────────────────────
     strip = None
     if args.joint_strip == "on":
-        bake_qpos = {
-            f"{args.agent_name}_{jn}": float(v)
-            for jn, v in zip(
-                g1_pick_osc_conf.l_arm["joint_names"], tele._L_INIT_JOINT_VALUES
-            )
-        }
-        # 腰也烘成 0，避免 OrcaStudio 导出 XML 里残留腰角，左臂每次烘出来不一样。
-        for jn in g1_pick_osc_conf.locked_waist_joints:
-            bake_qpos[f"{args.agent_name}_{jn}"] = 0.0
+        keep = mj_joint_strip.KEEP_DEFAULT + tuple(g1_pick_osc_conf.l_arm["joint_names"])
         strip = mj_joint_strip.install(
             None,
             args.agent_name,
+            keep=keep,
             kill_collision=(args.strip_col == "off"),
             required_cameras=tuple(camera_map.keys()) or ("cam_head",),
-            bake_qpos=bake_qpos,
             log=lambda m: (orca_logger.info(m), print(m, flush=True)),
         )
 
@@ -815,7 +808,7 @@ def main() -> None:
             orca_logger.info(f"OSC 阻抗刚度 kp 设为 {kp_val}（kd=2√kp 临界阻尼）")
 
         if stripped:
-            orca_logger.info("[STRIP] 自由度已在编译期剥离，跳过 pin_all_joints")
+            orca_logger.info("[STRIP] base/腰/下肢/左爪已剥离焊死，左臂保留自由演化，跳过 pin_all_joints")
         else:
             orca_logger.info("Pinning all joints (base + waist + l_arm)")
             tele.pin_all_joints(env, args.agent_name)

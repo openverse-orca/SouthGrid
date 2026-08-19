@@ -34,6 +34,7 @@ from scene.scene_manager import SceneManager
 from task.abstract_task import EmptyTask
 
 ENTRY_POINT = "envs.dataCollection.dataCollection_env:DataCollectionEnv"
+_L_INIT_JOINT_VALUES = [0.0, 0.127, 0.0, 1.5708, 0.0, 0.0, 0.0]
 base_dir = os.path.dirname(os.path.realpath(__file__))
 log_dir = os.path.join(base_dir, "logs")
 _GRIP_CLOSE_THRESHOLD = 0.5
@@ -162,7 +163,7 @@ def main() -> None:
     )
 
     default_joint_values = {}
-    for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], tele._L_INIT_JOINT_VALUES):
+    for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], _L_INIT_JOINT_VALUES):
         default_joint_values[jn] = v
     for jn, v in zip(g1_pick_osc_conf.r_arm["joint_names"], tele._R_INIT_JOINT_VALUES):
         default_joint_values[jn] = v
@@ -191,18 +192,13 @@ def main() -> None:
 
     strip = None
     if args.joint_strip == "on":
-        bake_qpos = {
-            f"{args.agent_name}_{jn}": float(v)
-            for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], tele._L_INIT_JOINT_VALUES)
-        }
-        for jn in g1_pick_osc_conf.locked_waist_joints:
-            bake_qpos[f"{args.agent_name}_{jn}"] = 0.0
+        keep = mj_joint_strip.KEEP_DEFAULT + tuple(g1_pick_osc_conf.l_arm["joint_names"])
         strip = mj_joint_strip.install(
             None,
             args.agent_name,
+            keep=keep,
             kill_collision=(args.strip_col == "off"),
             required_cameras=("cam_head",),
-            bake_qpos=bake_qpos,
             log=print,
         )
 
@@ -302,7 +298,7 @@ def main() -> None:
                     orca_logger.info("[Pico] 手柄已连接，可以开始录点")
                     print(
                         "\n  ✓ Pico 手柄已连接！移动右手柄遥操右臂，"
-                        "双 Grip 记录路点，右 Squeeze 丢弃上一点。",
+                        "双 Grip 记录路点，右 Squeeze 丢弃上一点并重置场景。",
                         flush=True,
                     )
                     try:

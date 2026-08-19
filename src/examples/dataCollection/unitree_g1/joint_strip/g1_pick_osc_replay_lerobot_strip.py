@@ -47,6 +47,7 @@ from scene.scene_manager import SceneManager
 from task.abstract_task import EmptyTask
 
 ENTRY_POINT = "envs.dataCollection.dataCollection_env:DataCollectionEnv"
+_L_INIT_JOINT_VALUES = [0.0, 0.127, 0.0, 1.5708, 0.0, 0.0, 0.0]
 
 orca_logger = get_orca_logger(
     name="G1OscReplay",
@@ -250,7 +251,7 @@ def main() -> None:
     )
 
     default_joint_values: dict = {}
-    for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], tele._L_INIT_JOINT_VALUES):
+    for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], _L_INIT_JOINT_VALUES):
         default_joint_values[jn] = v
     for jn, v in zip(g1_pick_osc_conf.r_arm["joint_names"], tele._R_INIT_JOINT_VALUES):
         default_joint_values[jn] = v
@@ -278,18 +279,13 @@ def main() -> None:
 
     strip = None
     if args.joint_strip == "on":
-        bake_qpos = {
-            f"{args.agent_name}_{jn}": float(v)
-            for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], tele._L_INIT_JOINT_VALUES)
-        }
-        for jn in g1_pick_osc_conf.locked_waist_joints:
-            bake_qpos[f"{args.agent_name}_{jn}"] = 0.0
+        keep = mj_joint_strip.KEEP_DEFAULT + tuple(g1_pick_osc_conf.l_arm["joint_names"])
         strip = mj_joint_strip.install(
             None,
             args.agent_name,
+            keep=keep,
             kill_collision=(args.strip_col == "off"),
             required_cameras=("cam_head",),
-            bake_qpos=bake_qpos,
             log=lambda m: (orca_logger.info(m), print(m, flush=True)),
         )
 
@@ -370,7 +366,7 @@ def main() -> None:
             orca_logger.info(f"OSC 阻抗刚度 kp 设为 {kp_val}（kd=2√kp 临界阻尼）")
 
         if stripped:
-            orca_logger.info("[STRIP] 自由度已在编译期剥离，跳过 pin_all_joints")
+            orca_logger.info("[STRIP] base/腰/下肢/左爪已剥离焊死，左臂保留自由演化，跳过 pin_all_joints")
         else:
             tele.pin_all_joints(env, args.agent_name)
 
