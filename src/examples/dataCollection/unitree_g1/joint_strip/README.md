@@ -7,6 +7,7 @@
 | `g1_pick_osc_collection_tele_lerobot_strip.py` | 遥操数采脚本（相对原版增加 `--joint_strip`） |
 | `record_waypoints.py` | Pico 录右臂路点，写出 YAML |
 | `g1_pick_osc_collection_scripted_lerobot_strip.py` | 回放路点 YAML 的自动采集脚本（不接 Pico） |
+| `g1_pick_osc_replay_lerobot_strip.py` | 回放脚本化采集写出的 LeRobot parquet |
 | `mj_joint_strip.py` | XML 注入：删关节、烘姿态、qpos 补全、安全检查 |
 | `uni_osc.json` | 当前实测场景布局 |
 | `example.yaml` | 任务配置（agent 前缀 `g1_pick_southgrid_usda_1_`） |
@@ -151,3 +152,25 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot_strip.py \
 一段 300 步 ≈ 1.5 s（`env.dt = time_step × frame_skip = 5 ms`），6 点路点加末尾保持约 9.5 s / 190 帧（`--fps 20 --clock sim`）。
 
 本脚本不做随机化，多集轨迹几乎相同；要多样性就多录几份路点，用 `--waypoint_files a.yaml,b.yaml` 串起来。
+
+---
+
+## 7. 回放已采集的 LeRobot 数据
+
+不开相机、不写盘。控制链路与脚本化采集相同，数据源换成 parquet 的 18 维 `action`（只驱动右臂 / 右爪）。
+
+```bash
+conda activate orcalab_lerobot
+cd src/examples/dataCollection/unitree_g1/joint_strip
+OMP_NUM_THREADS=1 python g1_pick_osc_replay_lerobot_strip.py \
+    --dataset_dir $HOME/southgrid_datasets/g1_osc_scripted \
+    --task_config example.yaml \
+    --agent_name g1_pick_southgrid_usda_1 \
+    --joint_strip on --strip_col off \
+    --time_step 0.001 --frame_skip 5 \
+    --steps_per_frame 10 \
+    --dls_lambda 0.23 --dls_sigma_th 0.12 --null_kp 10 \
+    --kp 0 --track_ki 0 --track_clamp 0.08
+```
+
+只播第 1 集加 `--episode 1`，循环加 `--loop`。
