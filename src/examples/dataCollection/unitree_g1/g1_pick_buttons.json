@@ -2358,8 +2358,8 @@
             ]
         },
         {
-            "name": "humanoid_robot_1",
-            "path": "/humanoid_robot_1",
+            "name": "g1_pick",
+            "path": "/g1_pick",
             "type": "AssetActor",
             "transform": {
                 "position": [
@@ -2375,7 +2375,7 @@
                 ],
                 "scale": 1.0
             },
-            "asset_path": "assets/cae3c6559556dd4f/default_project/prefabs/g1_pick_southgrid_usda",
+            "asset_path": "assets/cae3c6559556dd4f/default_project/prefabs/g1_pick_usda",
             "entity_overrides": [
                 {
                     "entity_path": [],
