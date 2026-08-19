@@ -207,7 +207,7 @@ def main() -> None:
         help="每个 parquet 帧重复的控制步数（fps=20、dt=5ms 时为 10）",
     )
     parser.add_argument("--settle_steps", type=int, default=10, help="开播前驻留步数")
-    parser.add_argument("--agent_name", default="g1_pick_southgrid_usda_1")
+    parser.add_argument("--agent_name", default="g1_pick")
     parser.add_argument("--orcagym_addr", default="localhost:50051")
     parser.add_argument("--dls_lambda", type=float, default=0.23)
     parser.add_argument("--dls_sigma_th", type=float, default=0.12)

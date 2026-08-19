@@ -270,7 +270,7 @@ def main() -> None:
     parser.add_argument("--orcagym_addr", default="localhost:50051")
     parser.add_argument(
         "--agent_name",
-        default="g1_pick_southgrid_usda_1",
+        default="g1_pick",
         help="OrcaStudio 场景中的 agent 名称",
     )
     parser.add_argument(

@@ -11,7 +11,7 @@ type: "pick_and_place"
 #   机器人关节名固定（如 g1_omnipicker_free_joint），而场景 actor 关节名带随机 GUID，
 #   仅记录机器人关节可避免回放时因 actor 关节名变化导致恢复失败。
 data_collection:
-  agent_joint_prefix: "g1_pick_southgrid_usda_1_"
+  agent_joint_prefix: "g1_pick_"
 
 # actor是要动态加载到场景中的物体
 # actor.name是物体在场景中的名字

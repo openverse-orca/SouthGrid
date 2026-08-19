@@ -132,7 +132,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--task_config", default="example.yaml")
     parser.add_argument("--orcagym_addr", default="localhost:50051")
-    parser.add_argument("--agent_name", default="g1_pick_southgrid_usda_1")
+    parser.add_argument("--agent_name", default="g1_pick")
     parser.add_argument("--output", default="waypoints_output.yaml")
     parser.add_argument("--debounce", type=float, default=0.5)
     parser.add_argument("--lerobot_out", default=None)

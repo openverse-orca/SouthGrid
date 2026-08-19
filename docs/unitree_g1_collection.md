@@ -120,12 +120,12 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
 
 `OMP_NUM_THREADS=1` 用于限制底层数值库的线程数，减少仿真、相机采集和视频编码之间的 CPU 争用。
 
-当前脚本的默认 `--agent_name` 为 `unitree_humanoid_robot_1`，默认 `--joint_strip` 为 `off`，与上面的布局和推荐运行方式不同。因此示例中的 `--agent_name g1_pick` 和 `--joint_strip on` 不应省略。
+当前脚本的默认 `--joint_strip` 为 `off`，与上面的推荐运行方式不同。因此示例中的 `--joint_strip on` 不应省略。
 
 | 参数 | 含义 | 脚本默认值 | 示例值或使用建议 |
 |------|------|------------|------------------|
 | `--task_config` | 场景任务配置文件 | `example.yaml` | 一般无需修改 |
-| `--agent_name` | OrcaLab 布局中的机器人名称 | `unitree_humanoid_robot_1` | 使用工具布局时必须设为 `g1_pick` |
+| `--agent_name` | OrcaLab 布局中的机器人名称 | `g1_pick` | 与 `g1_pick_tools.json` 一致；按钮布局改为 `humanoid_robot_1` |
 | `--lerobot_out` | LeRobot 数据集输出目录 | 无；采集模式必须指定 | 每个数据集使用独立目录 |
 | `--repo_id` | 写入数据集元信息的仓库名 | `local/g1_pick_osc` | 可按任务修改 |
 | `--task` | 写入数据集的语言指令 | `g1 pick osc teleoperation` | 应与实际任务和训练指令一致 |
