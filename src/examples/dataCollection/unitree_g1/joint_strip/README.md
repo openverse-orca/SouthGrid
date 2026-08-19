@@ -64,7 +64,7 @@ bash run_strip.sh /path/to/output_dataset
 
 ## 5. 录路点
 
-参数与数采相同。双手 Grip 记一点，右手 Grip 复位，Ctrl+C 写出 YAML。
+参数与数采相同。双手 Grip 记一点，右 Squeeze 丢弃上一点并重置场景，Ctrl+C 写出 YAML。
 
 ```bash
 cd src/examples/dataCollection/unitree_g1/joint_strip
