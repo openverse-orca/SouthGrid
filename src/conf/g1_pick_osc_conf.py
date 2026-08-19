@@ -22,7 +22,8 @@ l_arm = {
         "left_wrist_pitch_joint",
         "left_wrist_yaw_joint",
     ],
-    "neutral_joint_values": [-0.3684, 0.8495, 1.1284, -1.0472, 0.0, 0.0, 0.0],
+    # 停靠位：自然下垂贴身（与采集脚本 _L_INIT_JOINT_VALUES 一致）
+    "neutral_joint_values": [0.0, -1.3, 0.3, -1.0472, 0.0, 0.0, 0.0],
     "motors_names": [
         "left_shoulder_pitch_joint_mctrl",
         "left_shoulder_roll_joint_mctrl",

@@ -141,7 +141,7 @@ def main() -> None:
     parser.add_argument("--clock", choices=("sim", "wall"), default="wall")
     parser.add_argument("--cameras", default="head,wrist_r")
     parser.add_argument("--camera_source", choices=("websocket", "mp4"), default="websocket")
-    parser.add_argument("--dls_lambda", type=float, default=0.2)
+    parser.add_argument("--dls_lambda", type=float, default=0.23)
     parser.add_argument("--dls_sigma_th", type=float, default=0.12)
     parser.add_argument("--null_kp", type=float, default=10.0)
     parser.add_argument("--joint_strip", choices=["off", "on"], default="on")
@@ -195,6 +195,8 @@ def main() -> None:
             f"{args.agent_name}_{jn}": float(v)
             for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], tele._L_INIT_JOINT_VALUES)
         }
+        for jn in g1_pick_osc_conf.locked_waist_joints:
+            bake_qpos[f"{args.agent_name}_{jn}"] = 0.0
         strip = mj_joint_strip.install(
             None,
             args.agent_name,

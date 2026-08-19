@@ -70,8 +70,10 @@ orca_logger = get_orca_logger(
     force_reinit=True,
 )
 
-# 肘→夹爪 与地面法线夹角对齐重力（MuJoCo 实测 vsDown≈0°）。
-_L_INIT_JOINT_VALUES = [-0.3684, 0.8495, 1.1284, -1.0472, 0.0, 0.0, 0.0]
+# 左臂停靠位：自然下垂贴身。MuJoCo 实测 肩→夹爪 离竖直 6.3°，
+# 夹爪在基座系 [-0.008, +0.139, -0.116]（躯干左下方），与躯干/桌面均无接触，
+# 离右臂抓取区 51cm，不会挡右臂下探。
+_L_INIT_JOINT_VALUES = [0.0, -1.3, 0.3, -1.0472, 0.0, 0.0, 0.0]
 _R_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
@@ -749,6 +751,9 @@ def main() -> None:
             f"{args.agent_name}_{jn}": float(v)
             for jn, v in zip(g1_pick_osc_conf.l_arm["joint_names"], _L_INIT_JOINT_VALUES)
         }
+        # 腰也烘成 0，避免 OrcaStudio 导出 XML 里残留腰角，左臂每次烘出来不一样。
+        for jn in g1_pick_osc_conf.locked_waist_joints:
+            bake_qpos[f"{args.agent_name}_{jn}"] = 0.0
         strip = mj_joint_strip.install(
             None, args.agent_name,
             kill_collision=(args.strip_col == "off"),
