@@ -2,15 +2,15 @@
     "version": "3.0",
     "viewport_camera_transform": {
         "position": [
-            19.96070098876953,
-            -23.915742874145508,
-            1.903012752532959
+            19.40397834777832,
+            -23.83672523498535,
+            2.712247371673584
         ],
         "rotation": [
-            0.6290191548248341,
-            -0.31637064307888124,
-            0.3190680513366306,
-            -0.6343816656221646
+            0.6167636942594552,
+            -0.260767333592499,
+            0.28922548106223883,
+            -0.6840698533620703
         ]
     },
     "actors": [
@@ -93,6 +93,11 @@
                                             "type_index": 0,
                                             "property_overrides": [
                                                 {
+                                                    "name": "friction.z",
+                                                    "value": 10.0,
+                                                    "type": "float"
+                                                },
+                                                {
                                                     "name": "solimp.x",
                                                     "value": 0.9800000190734863,
                                                     "type": "float"
@@ -105,11 +110,6 @@
                                                 {
                                                     "name": "solref.x",
                                                     "value": 9.999999747378752e-05,
-                                                    "type": "float"
-                                                },
-                                                {
-                                                    "name": "friction.z",
-                                                    "value": 10,
                                                     "type": "float"
                                                 }
                                             ]
@@ -791,6 +791,11 @@
                                                     "type": "float"
                                                 },
                                                 {
+                                                    "name": "friction.z",
+                                                    "value": 0.009999999776482582,
+                                                    "type": "float"
+                                                },
+                                                {
                                                     "name": "solimp.x",
                                                     "value": 0.9800000190734863,
                                                     "type": "float"
@@ -803,11 +808,6 @@
                                                 {
                                                     "name": "solref.x",
                                                     "value": 9.999999747378752e-05,
-                                                    "type": "float"
-                                                },
-                                                {
-                                                    "name": "friction.z",
-                                                    "value": 0.01,
                                                     "type": "float"
                                                 }
                                             ]
@@ -893,7 +893,7 @@
                                                 },
                                                 {
                                                     "name": "friction.z",
-                                                    "value": 0.01,
+                                                    "value": 0.009999999776482582,
                                                     "type": "float"
                                                 },
                                                 {
@@ -945,13 +945,8 @@
                                                     "type": "int"
                                                 },
                                                 {
-                                                    "name": "friction.x",
-                                                    "value": 1.0,
-                                                    "type": "float"
-                                                },
-                                                {
                                                     "name": "friction.z",
-                                                    "value": 0.01,
+                                                    "value": 0.009999999776482582,
                                                     "type": "float"
                                                 },
                                                 {
@@ -1003,13 +998,8 @@
                                                     "type": "int"
                                                 },
                                                 {
-                                                    "name": "friction.x",
-                                                    "value": 1.0,
-                                                    "type": "float"
-                                                },
-                                                {
                                                     "name": "friction.z",
-                                                    "value": 0.01,
+                                                    "value": 0.009999999776482582,
                                                     "type": "float"
                                                 },
                                                 {
@@ -1061,13 +1051,8 @@
                                                     "type": "int"
                                                 },
                                                 {
-                                                    "name": "friction.x",
-                                                    "value": 1.0,
-                                                    "type": "float"
-                                                },
-                                                {
                                                     "name": "friction.z",
-                                                    "value": 0.01,
+                                                    "value": 0.009999999776482582,
                                                     "type": "float"
                                                 },
                                                 {
@@ -2467,62 +2452,30 @@
                         },
                         {
                             "name": "waist_yaw_link_rev_1_0",
-                            "index": 5
+                            "index": 0
                         },
                         {
                             "name": "waist_roll_link_rev_1_0",
-                            "index": 0
+                            "index": 1
                         },
                         {
                             "name": "torso_link_rev_1_0",
                             "index": 0
                         },
                         {
-                            "name": "right_shoulder_pitch_link",
-                            "index": 8
+                            "name": "head_camera1",
+                            "index": 10
                         },
                         {
-                            "name": "right_shoulder_roll_link",
-                            "index": 1
-                        },
-                        {
-                            "name": "right_shoulder_yaw_link",
-                            "index": 1
-                        },
-                        {
-                            "name": "right_elbow_link",
-                            "index": 1
-                        },
-                        {
-                            "name": "right_wrist_roll_link",
-                            "index": 1
-                        },
-                        {
-                            "name": "right_wrist_pitch_link",
+                            "name": "head_camera2",
                             "index": 0
-                        },
-                        {
-                            "name": "right_wrist_yaw_link",
-                            "index": 0
-                        },
-                        {
-                            "name": "arm_r_end_link",
-                            "index": 2
-                        },
-                        {
-                            "name": "camera_right_body1",
-                            "index": 4
-                        },
-                        {
-                            "name": "camera_right_body2",
-                            "index": 1
                         },
                         {
                             "name": "cameras",
-                            "index": 1
+                            "index": 0
                         },
                         {
-                            "name": "camera_right",
+                            "name": "head_cam",
                             "index": 0
                         }
                     ],
@@ -2532,8 +2485,13 @@
                             "type_index": 0,
                             "property_overrides": [
                                 {
+                                    "name": "VerticalFieldOfViewDeg",
+                                    "value": 77.0,
+                                    "type": "float"
+                                },
+                                {
                                     "name": "NearClipDistance",
-                                    "value": 0.0010000000474974513,
+                                    "value": 0.009999999776482582,
                                     "type": "float"
                                 },
                                 {
@@ -2548,7 +2506,12 @@
                                 },
                                 {
                                     "name": "ColorPort",
-                                    "value": 7080,
+                                    "value": 7090,
+                                    "type": "int"
+                                },
+                                {
+                                    "name": "DepthPort",
+                                    "value": 7091,
                                     "type": "int"
                                 },
                                 {
@@ -2580,54 +2543,54 @@
                         },
                         {
                             "name": "waist_yaw_link_rev_1_0",
-                            "index": 5
+                            "index": 0
                         },
                         {
                             "name": "waist_roll_link_rev_1_0",
-                            "index": 0
+                            "index": 1
                         },
                         {
                             "name": "torso_link_rev_1_0",
                             "index": 0
                         },
                         {
-                            "name": "left_shoulder_pitch_link",
+                            "name": "right_shoulder_pitch_link",
                             "index": 2
                         },
                         {
-                            "name": "left_shoulder_roll_link",
-                            "index": 0
-                        },
-                        {
-                            "name": "left_shoulder_yaw_link",
-                            "index": 0
-                        },
-                        {
-                            "name": "left_elbow_link",
-                            "index": 0
-                        },
-                        {
-                            "name": "left_wrist_roll_link",
-                            "index": 2
-                        },
-                        {
-                            "name": "left_wrist_pitch_link",
+                            "name": "right_shoulder_roll_link",
                             "index": 1
                         },
                         {
-                            "name": "left_wrist_yaw_link",
+                            "name": "right_shoulder_yaw_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "right_elbow_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "right_wrist_roll_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "right_wrist_pitch_link",
+                            "index": 0
+                        },
+                        {
+                            "name": "right_wrist_yaw_link",
                             "index": 2
                         },
                         {
-                            "name": "arm_l_end_link",
+                            "name": "arm_r_end_link",
                             "index": 1
                         },
                         {
-                            "name": "camera_left_body1",
-                            "index": 3
+                            "name": "camera_right_body1",
+                            "index": 4
                         },
                         {
-                            "name": "camera_left_body2",
+                            "name": "camera_right_body2",
                             "index": 1
                         },
                         {
@@ -2635,7 +2598,7 @@
                             "index": 1
                         },
                         {
-                            "name": "camera_left",
+                            "name": "camera_right",
                             "index": 0
                         }
                     ],
@@ -2646,83 +2609,7 @@
                             "property_overrides": [
                                 {
                                     "name": "NearClipDistance",
-                                    "value": 0.0010000000474974513,
-                                    "type": "float"
-                                },
-                                {
-                                    "name": "ColorCamera",
-                                    "value": true,
-                                    "type": "bool"
-                                },
-                                {
-                                    "name": "UseNvEnc",
-                                    "value": true,
-                                    "type": "bool"
-                                },
-                                {
-                                    "name": "Enable",
-                                    "value": true,
-                                    "type": "bool"
-                                }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "entity_path": [
-                        {
-                            "name": "mujoco_wrap",
-                            "index": 0
-                        },
-                        {
-                            "name": "rootPrim",
-                            "index": 0
-                        },
-                        {
-                            "name": "pelvis",
-                            "index": 0
-                        },
-                        {
-                            "name": "pelvis",
-                            "index": 0
-                        },
-                        {
-                            "name": "waist_yaw_link_rev_1_0",
-                            "index": 5
-                        },
-                        {
-                            "name": "waist_roll_link_rev_1_0",
-                            "index": 0
-                        },
-                        {
-                            "name": "torso_link_rev_1_0",
-                            "index": 0
-                        },
-                        {
-                            "name": "head_camera1",
-                            "index": 0
-                        },
-                        {
-                            "name": "head_camera2",
-                            "index": 1
-                        },
-                        {
-                            "name": "cameras",
-                            "index": 1
-                        },
-                        {
-                            "name": "head_cam",
-                            "index": 0
-                        }
-                    ],
-                    "group_overrids": [
-                        {
-                            "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
-                            "type_index": 0,
-                            "property_overrides": [
-                                {
-                                    "name": "NearClipDistance",
-                                    "value": 0.0010000000474974513,
+                                    "value": 0.10000000149011612,
                                     "type": "float"
                                 },
                                 {
@@ -2737,7 +2624,12 @@
                                 },
                                 {
                                     "name": "ColorPort",
-                                    "value": 7090,
+                                    "value": 7080,
+                                    "type": "int"
+                                },
+                                {
+                                    "name": "DepthPort",
+                                    "value": 7081,
                                     "type": "int"
                                 },
                                 {

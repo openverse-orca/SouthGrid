@@ -19,13 +19,13 @@
 
 | 布局文件 | 布局中的机器人名称 | `--agent_name` |
 |----------|--------------------|----------------|
-| `g1_pick_tools.json` | `g1_pick_southgrid_usda_1` | `g1_pick_southgrid_usda_1` |
+| `g1_pick_tools.json` | `g1_pick` | `g1_pick` |
 | `g1_pick_buttons.json` | `humanoid_robot_1` | `humanoid_robot_1` |
 
 本文的示例命令按 `g1_pick_tools.json` 编写，因此均显式传入：
 
 ```text
---agent_name g1_pick_southgrid_usda_1
+--agent_name g1_pick
 ```
 
 如果加载 `g1_pick_buttons.json`，必须把命令中的 `--agent_name` 改为布局里的实际机器人名称。脚本中的默认值不一定与当前布局一致，请勿省略该参数。
@@ -103,7 +103,7 @@ adb reverse tcp:8001 tcp:8001
 ```bash
 OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
     --task_config example.yaml \
-    --agent_name g1_pick_southgrid_usda_1 \
+    --agent_name g1_pick \
     --lerobot_out $HOME/southgrid_datasets/g1_osc \
     --repo_id local/g1_pick_osc_strip \
     --task "按红色按钮" \
@@ -120,12 +120,12 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
 
 `OMP_NUM_THREADS=1` 用于限制底层数值库的线程数，减少仿真、相机采集和视频编码之间的 CPU 争用。
 
-当前脚本的默认 `--agent_name` 为 `unitree_humanoid_robot_1`，默认 `--joint_strip` 为 `off`，与上面的布局和推荐运行方式不同。因此示例中的 `--agent_name g1_pick_southgrid_usda_1` 和 `--joint_strip on` 不应省略。
+当前脚本的默认 `--agent_name` 为 `unitree_humanoid_robot_1`，默认 `--joint_strip` 为 `off`，与上面的布局和推荐运行方式不同。因此示例中的 `--agent_name g1_pick` 和 `--joint_strip on` 不应省略。
 
 | 参数 | 含义 | 脚本默认值 | 示例值或使用建议 |
 |------|------|------------|------------------|
 | `--task_config` | 场景任务配置文件 | `example.yaml` | 一般无需修改 |
-| `--agent_name` | OrcaLab 布局中的机器人名称 | `unitree_humanoid_robot_1` | 使用工具布局时必须设为 `g1_pick_southgrid_usda_1` |
+| `--agent_name` | OrcaLab 布局中的机器人名称 | `unitree_humanoid_robot_1` | 使用工具布局时必须设为 `g1_pick` |
 | `--lerobot_out` | LeRobot 数据集输出目录 | 无；采集模式必须指定 | 每个数据集使用独立目录 |
 | `--repo_id` | 写入数据集元信息的仓库名 | `local/g1_pick_osc` | 可按任务修改 |
 | `--task` | 写入数据集的语言指令 | `g1 pick osc teleoperation` | 应与实际任务和训练指令一致 |
@@ -187,7 +187,7 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
 ```bash
 OMP_NUM_THREADS=1 python record_waypoints.py \
     --task_config example.yaml \
-    --agent_name g1_pick_southgrid_usda_1 \
+    --agent_name g1_pick \
     --dls_lambda 0.2 \
     --joint_strip on \
     --strip_col off \
@@ -239,7 +239,7 @@ segments:
 ```bash
 OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot.py \
     --task_config example.yaml \
-    --agent_name g1_pick_southgrid_usda_1 \
+    --agent_name g1_pick \
     --waypoint_files waypoint_tool/my_waypoint_tool3.yaml,waypoint_tool/my_waypoint_tool4.yaml \
     --task "按红色按钮" \
     --lerobot_out $HOME/southgrid_datasets/g1_osc_scripted \
@@ -299,7 +299,7 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot.py \
 OMP_NUM_THREADS=1 python g1_pick_osc_replay_lerobot.py \
     --dataset_dir $HOME/southgrid_datasets/g1_osc_scripted \
     --task_config example.yaml \
-    --agent_name g1_pick_southgrid_usda_1 \
+    --agent_name g1_pick \
     --joint_strip on \
     --strip_col off \
     --time_step 0.001 \
@@ -355,7 +355,7 @@ Unitree G1 任务配置位于 `src/examples/dataCollection/unitree_g1/example.ya
 level_name: "example"
 type: "pick_and_place"
 data_collection:
-  agent_joint_prefix: "g1_pick_southgrid_usda_1_"
+  agent_joint_prefix: "g1_pick_"
 ```
 
 运行时，四个入口脚本都会根据 `--agent_name` 覆盖 `agent_joint_prefix`。因此最重要的是保证命令中的 `--agent_name` 与当前布局中的机器人名称完全一致。
@@ -441,7 +441,7 @@ data_collection:
 
 ## 故障排查
 
-**现象**：脚本找不到机器人或初始化失败。 **处理**：检查当前布局的机器人名称。`g1_pick_tools.json` 使用 `g1_pick_southgrid_usda_1`，`g1_pick_buttons.json` 使用 `humanoid_robot_1`；将 `--agent_name` 改为实际名称。
+**现象**：脚本找不到机器人或初始化失败。 **处理**：检查当前布局的机器人名称。`g1_pick_tools.json` 使用 `g1_pick`，`g1_pick_buttons.json` 使用 `humanoid_robot_1`；将 `--agent_name` 改为实际名称。
 
 **现象**：相机端口 `7080` 或 `7090` 超时。 **处理**：确认仿真已运行，并在 OrcaLab 中检查右腕 `7080`、头部 `7090`、`Color Camera`、`UseNvEnc` 和相机启用状态。`g1_pick_buttons.json` 没有保存这些端口 override，使用时需手动核对。
 
