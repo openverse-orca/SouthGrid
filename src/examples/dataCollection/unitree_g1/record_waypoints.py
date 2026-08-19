@@ -22,7 +22,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 import mj_joint_strip
-import g1_pick_osc_collection_tele_lerobot_strip as tele
+import g1_pick_osc_collection_tele_lerobot as tele
 
 from conf import g1_pick_osc_conf
 from controllers import controllers

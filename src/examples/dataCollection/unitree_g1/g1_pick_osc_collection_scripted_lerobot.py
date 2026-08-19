@@ -1,6 +1,6 @@
 """G1 Pick OSC 脚本化自动采集 —— 回放 record_waypoints.py 录制的路点。
 
-控制链路与 g1_pick_osc_collection_tele_lerobot_strip.py 完全一致：
+控制链路与 g1_pick_osc_collection_tele_lerobot.py 完全一致：
 右臂 OSC(motor 力矩) + 2F85 反向夹爪 + 非右臂自由度编译期剥离。
 唯一区别是不接 Pico：路点 YAML 离线插值成整条轨迹，逐控制步写进 OSC 控制器，
 任务状态由脚本在轨迹首尾自动置 RUNNING / END，每集跑完强制写盘。
@@ -39,7 +39,7 @@ if _common_dir not in sys.path:
 
 import data_collection_scripted as scripted
 import mj_joint_strip
-import g1_pick_osc_collection_tele_lerobot_strip as tele
+import g1_pick_osc_collection_tele_lerobot as tele
 
 from conf import g1_pick_osc_conf
 from controllers.controller_2f85_reverse import Controller2F85Reverse

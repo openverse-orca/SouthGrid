@@ -1,6 +1,6 @@
 """回放 g1_pick_osc 脚本化采集写出的 LeRobot v2.1 数据集。
 
-环境与 g1_pick_osc_collection_scripted_lerobot_strip.py 一致：
+环境与 g1_pick_osc_collection_scripted_lerobot.py 一致：
 右臂 OSC + 右爪 2F85 + joint_strip。数据源换成 parquet 的 18 维 action，
 只驱动右臂 / 右爪；左臂那 9 维丢掉（strip 后左臂已不存在）。
 """
@@ -30,7 +30,7 @@ if base_dir not in sys.path:
     sys.path.insert(0, base_dir)
 
 import mj_joint_strip
-import g1_pick_osc_collection_tele_lerobot_strip as tele
+import g1_pick_osc_collection_tele_lerobot as tele
 
 from conf import g1_pick_osc_conf
 from controllers.controller_2f85_reverse import Controller2F85Reverse
