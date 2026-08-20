@@ -20,7 +20,6 @@
 
     <default class="gripper">
       <joint damping="0.1" armature="0.01" frictionloss="0.02" />
-      <!-- <geom solref="0.001 1" solimp = "0.98 0.999 0.001 0.5 2"/> -->
     </default>
     <joint damping="0.15" armature="0.01" frictionloss="0.02" />
   </default>
@@ -59,7 +58,6 @@
     <mesh name="left_wrist_roll_link" file="left_wrist_roll_link.obj" />
     <mesh name="left_wrist_pitch_link" file="left_wrist_pitch_link.obj" />
     <mesh name="left_wrist_yaw_link" file="left_wrist_yaw_link.obj" />
-    <!-- <mesh name="left_hand_palm_link" file="left_hand_palm_link.STL"/> -->
     <mesh name="right_shoulder_pitch_link" file="right_shoulder_pitch_link.obj" />
     <mesh name="right_shoulder_roll_link" file="right_shoulder_roll_link.obj" />
     <mesh name="right_shoulder_yaw_link" file="right_shoulder_yaw_link.obj" />
@@ -110,7 +108,6 @@
 
 
   <worldbody>
-    <!-- <geom name="ground" size="10 10 1" type="plane" rgba="1 0.5 0.5 0.5" group="1" /> -->
 
     <body name="pelvis" pos="-0.32 0 0.79" childclass="g1">
       <light pos="0 0 2" mode="trackcom" />
@@ -224,7 +221,6 @@
             <geom name="torso_collision" class="collision" size="0.09" fromto="0.01 0 0.08 0.01 0 0.2" />
             <geom name="head_collision" class="collision" type="sphere" size="0.06" pos="0 0 .43" />
 
-            <!-- <camera name="head_cam" fovy="60" pos="0.05 0 0.43"/> -->
             <body euler="0 0 -1.5708" pos="0.05 0 0.43" name="head_camera1">
               <geom type="sphere" size="0.001" />
               <body euler="-0.7854 0 0" name="head_camera2">
@@ -264,17 +260,10 @@
                           <inertial pos="0.0708244 0.000191745 0.00161742" quat="0.510571 0.526295 0.468078 0.493188" mass="0.254576" diaginertia="0.000646113 0.000559993 0.000147566" />
                           <joint name="left_wrist_yaw_joint" axis="0 0 1" range="-1.61443 1.61443" armature="0.00425" actuatorfrcrange="-5 5" />
                           <geom class="visual" mesh="left_wrist_yaw_link" />
-                          <!-- <geom pos="0.0415 0.003 0" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" material="black" mesh="left_hand_palm_link"/> -->
-                          <!-- <geom pos="0.0415 0.003 0" quat="1 0 0 0" type="mesh" group="3" material="black" mesh="left_hand_palm_link"/> -->
                           <site name="left_palm" pos="0.08 0 0" size="0.01" />
 
                           <body name="arm_l_end_link" pos="0.04 0 0" euler="3.1416 1.5708 0">
                             <inertial pos="-0.00012146 -3.86298e-05 0.0228846" quat="0.999995 -0.00236518 -0.00169232 0.000938134" mass="0.29746" diaginertia="0.000211736 0.000196817 0.000110095" />
-                            <!-- <joint name="idx27_arm_l_joint7" pos="0 0 0" axis="0 0 1" range="-3.1 3.1" actuatorfrcrange="-30 30" /> -->
-                            <!-- <geom name="default_geom28" type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="arm_l_end_link" material="alloy_white" /> -->
-                            <!-- <geom name="default_geom29" size="0.0308 0.023" pos="-4.55295e-05
-                            -0.00230047 -0.0225" quat="0 0 1 0" type="cylinder" group="3" rgba="1 1
-                            1 1" /> -->
                             <geom name="default_geom30" quat="0.707107 0 0 0.707107" type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="gripper_base_link" material="composite_black" />
                             <geom name="default_geom31" class="gripper" quat="0.707107 0 0 0.707107" type="mesh" group="3" mesh="gripper_base_link" />
                             <site name="ee_center_site_l" pos="-0.00146473 0 0.08" quat="0.707105 0 -0.707108 0" group="3" />
@@ -287,11 +276,6 @@
                               </body>
                             </body>
 
-                            <!-- <frame name="camera_left_body1" pos="0.02 -0.157 -0.129">
-                              <frame name="camera_left_body2" euler="1.5707 0 0">
-                                <camera name="camera_left" resolution="640 480" fovy="90"/>
-                              </frame>
-                            </frame> -->
 
                             <body name="gripper_l_inner_link1" pos="0.0195 0 0.0565" quat="0.496702 -0.503276 -0.496702 -0.503276">
                               <inertial pos="0.0094685 0.0068806 6.5437e-05" quat="0.488058 0.00022793 0.00062709 0.872811" mass="0.025428" diaginertia="2.65562e-06 1.69368e-06 1.5501e-06" />
@@ -380,18 +364,10 @@
                           <inertial pos="0.0708244 -0.000191745 0.00161742" quat="0.493188 0.468078 0.526295 0.510571" mass="0.254576" diaginertia="0.000646113 0.000559993 0.000147566" />
                           <joint name="right_wrist_yaw_joint" axis="0 0 1" range="-1.61443 1.61443" armature="0.00425" actuatorfrcrange="-5 5" />
                           <geom class="visual" mesh="right_wrist_yaw_link" />
-                          <!-- <geom pos="0.0415 -0.003 0" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" material="black" mesh="right_hand_palm_link"/> -->
-                          <!-- <geom pos="0.0415 -0.003 0" quat="1 0 0 0" type="mesh" group="3" material="black" mesh="right_hand_palm_link"/> -->
                           <site name="right_palm" pos="0.08 0 0" size="0.01" />
-                          <!-- <camera name="wrist_cam" pos="0.08 0.04 0" xyaxes="0 0 1 0 1 0" fovy="75"/> -->
 
                           <body name="arm_r_end_link" pos="0.04 0 0" euler="0 1.5708 0">
                             <inertial pos="-0.000121465 -3.86298e-05 0.0228846" quat="0.999995 -0.00236524 -0.00169184 0.000938876" mass="0.29746" diaginertia="0.000211736 0.000196817 0.000110095" />
-                            <!-- <joint name="idx67_arm_r_joint7" pos="0 0 0" axis="0 0 1" range="-3.1 3.1" actuatorfrcrange="-30 30" /> -->
-                            <!-- <geom name="default_geom60" type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="arm_r_end_link" material="alloy_white" /> -->
-                            <!-- <geom name="default_geom61" size="0.0308 0.023" pos="-4.55295e-05
-                            -0.00230047 -0.0225" quat="0 0 1 0" type="cylinder" group="3" rgba="1 1
-                            1 1" /> -->
                             <geom name="default_geom62" quat="0.707107 0 0 -0.707107" type="mesh" contype="0" conaffinity="0" group="1" density="0" mesh="gripper_base_link" material="composite_black" />
                             <geom name="default_geom63" class="gripper" quat="0.707107 0 0 -0.707107" type="mesh" group="3" mesh="gripper_base_link" />
                             <site name="ee_center_site_r" pos="-0.00307497 0 0.08" quat="0.707105 0 -0.707108 0" group="3" />
@@ -405,11 +381,6 @@
                               </body>
                             </body>
 
-                            <!-- <frame name="camera_right_body1" pos="-0.024 -0.124 -0.107">
-                              <frame name="camera_right_body2" euler="1.5707 0 0">
-                                <camera name="camera_right" resolution="640 480" fovy="90"/>
-                              </frame>
-                            </frame> -->
 
                             <body name="gripper_r_inner_link1" pos="-0.0195 0 0.0565" quat="-0.503276 -0.496702 0.503276 -0.496702">
                               <inertial pos="0.0094685 0.0068806 6.5437e-05" quat="0.488058 0.00022793 0.00062709 0.872811" mass="0.025428" diaginertia="2.65562e-06 1.69368e-06 1.5501e-06" />
@@ -491,23 +462,6 @@
     <position class="g1" name="waist_yaw_joint" joint="waist_yaw_joint" kp="40.179" kv="2.558" />
     <position class="g1" name="waist_roll_joint" joint="waist_roll_joint" kp="28.501" kv="1.814" />
     <position class="g1" name="waist_pitch_joint" joint="waist_pitch_joint" kp="28.501" kv="1.814" />
-
-    <!-- <position class="g1" name="left_shoulder_pitch_joint" joint="left_shoulder_pitch_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="left_shoulder_roll_joint" joint="left_shoulder_roll_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="left_shoulder_yaw_joint" joint="left_shoulder_yaw_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="left_elbow_joint" joint="left_elbow_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="left_wrist_roll_joint" joint="left_wrist_roll_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="left_wrist_pitch_joint" joint="left_wrist_pitch_joint" kp="16.778" kv="1.068"/> -->
-    <!-- <position class="g1" name="left_wrist_yaw_joint" joint="left_wrist_yaw_joint" kp="16.778" kv="1.068"/> -->
-
-    <!-- <position class="g1" name="right_shoulder_pitch_joint" joint="right_shoulder_pitch_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="right_shoulder_roll_joint" joint="right_shoulder_roll_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="right_shoulder_yaw_joint" joint="right_shoulder_yaw_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="right_elbow_joint" joint="right_elbow_joint" kp="14.251" kv="0.907"/> -->
-    <!-- <position class="g1" name="right_wrist_roll_joint" joint="right_wrist_roll_joint" kp="14.251" kv="0.907"/>
-    <position class="g1" name="right_wrist_pitch_joint" joint="right_wrist_pitch_joint" kp="16.778" kv="1.068"/>
-    <position class="g1" name="right_wrist_yaw_joint" joint="right_wrist_yaw_joint" kp="16.778" kv="1.068"/> -->
-
 
     <motor class="g1" name="left_shoulder_pitch_joint_mctrl" joint="left_shoulder_pitch_joint" ctrllimited="false" forcerange="-25 25" />
     <motor class="g1" name="left_shoulder_roll_joint_mctrl" joint="left_shoulder_roll_joint" ctrllimited="false" forcerange="-25 25" />

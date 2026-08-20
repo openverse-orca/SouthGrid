@@ -104,7 +104,7 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
     --task_config example.yaml \
     --agent_name g1_pick \
     --lerobot_out $HOME/southgrid_datasets/g1_osc \
-    --repo_id local/g1_pick_osc_strip \
+    --repo_id local/g1_pick_osc \
     --task "按红色按钮" \
     --fps 20 \
     --clock wall \
@@ -295,7 +295,7 @@ OMP_NUM_THREADS=1 python g1_pick_osc_replay_lerobot.py \
 | 参数 | 含义 | 默认值 | 使用建议 |
 |------|------|--------|----------|
 | `--dataset_dir` | 待回放的 LeRobot 数据集根目录 | 无，必须指定 | 目录下应存在 `data/chunk-*` |
-| `--episode` | 只回放第 N 集，编号从 1 开始 | 未指定时回放全部 | 调试单集时使用 |
+| `--episode` | 只回放第 N 集，编号从 1 开始 | 未指定时回放全部 | 仅查看指定回合时使用 |
 | `--loop` | 全部播完后从头循环 | 未启用 | 循环展示时追加 |
 | `--steps_per_frame` | 每个 parquet 帧重复执行的控制步数 | `10` | 20 FPS、5 ms 控制周期时与原采样周期对应 |
 | `--settle_steps` | 开播前保持初始目标的控制步数 | `10` | 初始状态不稳定时增加 |

@@ -370,7 +370,7 @@ def iter_frames_from_mp4(
 
 
 def probe_mp4_hw(episode_video_dir: str, camera_map: dict, default_hw: tuple = DEFAULT_HW) -> tuple:
-    """从录制完成的 MP4 首帧探测真实分辨率 (H, W)，失败回退 default_hw。
+    """返回录制 MP4 的首帧分辨率；视频不可用时返回 ``default_hw``。
 
     必须在 env.stop_save_video() 之后调用（否则 MP4 尚未写入文件头）。
     """

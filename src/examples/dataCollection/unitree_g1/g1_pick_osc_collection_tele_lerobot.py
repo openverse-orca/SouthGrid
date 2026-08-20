@@ -553,7 +553,7 @@ def main() -> None:
             if any(env_name == _CAM_KEY_MAP.get(k) for k in _enabled)
         }
         if not camera_map:
-            orca_logger.warning("--cameras 参数未匹配到任何已知相机，回退全路")
+            orca_logger.warning("--cameras 未匹配已配置相机，将使用完整相机配置")
             camera_map = DEFAULT_CAMERA_MAP
 
     try:
@@ -1207,7 +1207,7 @@ def main() -> None:
                             env.stop_save_video()
                         except Exception as _stop_e:
                             orca_logger.warning(
-                                f"stop_save_video 失败（可忽略）: {_stop_e}"
+                                "视频流停止请求未完成"
                             )
                         video_started = False
 

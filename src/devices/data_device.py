@@ -108,7 +108,7 @@ class DataDevice(AbstractDevice):
         '''
         @description: 获取机器人初始关节位置（用于回放时恢复）
         @return:
-            initial_joint_qpos: 关节名到 qpos 的映射，旧数据无此字段时返回 None
+            initial_joint_qpos: 关节名到 qpos 的映射；字段缺省时返回 None
         '''
         return self.initial_joint_qpos
 
@@ -116,7 +116,7 @@ class DataDevice(AbstractDevice):
         '''
         @description: 获取仿真器 opt 配置（timestep/gravity/integrator 等，用于训练复现）
         @return:
-            opt_config: dict；旧数据无此字段时返回 None
+            opt_config: dict；字段缺省时返回 None
         '''
         return self.opt_config
 

@@ -284,20 +284,14 @@ class QposBridge:
 # ---------------------------------------------------------------------------
 def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
                  keep_joints=(), foreign_joints=()):
-    """验证任务模型的资源、控制链和 qpos 映射，返回 (ok, lines)。"""
+    """Validate the task model configuration and return ``(ok, messages)``."""
     import mujoco
     L, fatal = [], []
 
     def _nm(m, obj, i):
         return mujoco.mj_id2name(m, obj, i) or ""
 
-    L.append(f"  规模: nq {mj_full.nq}→{mj_str.nq}  nv {mj_full.nv}→{mj_str.nv}  "
-             f"nu {mj_full.nu}→{mj_str.nu}  njnt {mj_full.njnt}→{mj_str.njnt}")
-    L.append(f"        nbody {mj_full.nbody}→{mj_str.nbody}  "
-             f"ngeom {mj_full.ngeom}→{mj_str.ngeom}  ncam {mj_full.ncam}→{mj_str.ncam}  "
-             f"nsite {mj_full.nsite}→{mj_str.nsite}")
-
-    # 场景与传感资源完整性
+    # Scene and sensor resources.
     for label, n_full, n_str in (
         ("body", mj_full.nbody, mj_str.nbody),
         ("geom", mj_full.ngeom, mj_str.ngeom),
@@ -305,9 +299,9 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
         ("site", mj_full.nsite, mj_str.nsite),
     ):
         if n_str < n_full:
-            fatal.append(f"{label} 数量减少 {n_full}→{n_str}（应保持不变）")
+            fatal.append(f"缺少必需的 {label} 资源")
 
-    # 相机可能由 MuJoCo XML 或 OrcaStudio 场景提供
+    # Cameras may be supplied by the model or the OrcaStudio scene.
     cams_f = {_nm(mj_full, mujoco.mjtObj.mjOBJ_CAMERA, i) for i in range(int(mj_full.ncam))}
     cams_s = {_nm(mj_str, mujoco.mjtObj.mjOBJ_CAMERA, i) for i in range(int(mj_str.ncam))}
     if not cams_f:
@@ -318,17 +312,17 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
                 continue
             hit = [c for c in cams_s if want in c]
             if hit:
-                L.append(f"  相机 '{want}' ✓ ({hit[0]})")
+                L.append(f"  相机 '{want}' 可用 ✓")
             else:
                 fatal.append(f"缺少必需相机 '{want}'")
 
-    # 控制链完整性
+    # Control interface.
     sj = {_nm(mj_str, mujoco.mjtObj.mjOBJ_JOINT, i) for i in range(int(mj_str.njnt))}
     lost = [j for j in keep_joints if j not in sj]
     if lost:
-        fatal.append(f"控制链缺少 {len(lost)} 个关节")
+        fatal.append("控制接口不完整")
     else:
-        L.append(f"  控制链关节 {len(keep_joints)} 个 ✓")
+        L.append("  控制接口完整 ✓")
 
     n_act = 0
     for i in range(int(mj_str.nu)):
@@ -336,38 +330,37 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
         if int(mj_str.actuator_trntype[i]) == mujoco.mjtTrn.mjTRN_JOINT and trn >= 0:
             if _nm(mj_str, mujoco.mjtObj.mjOBJ_JOINT, trn) in keep_joints:
                 n_act += 1
-    L.append(f"  指向保留关节的执行器 {n_act} 个")
     if n_act == 0:
-        fatal.append("控制链没有可用执行器")
+        fatal.append("控制接口没有可用执行器")
 
-    # 场景物体关节完整性
+    # Scene object interface.
     lost_f = [j for j in foreign_joints if j not in sj]
     if lost_f:
-        fatal.append(f"场景物体缺少 {len(lost_f)} 个关节")
+        fatal.append("场景物体接口不完整")
     else:
-        L.append(f"  场景物体关节 {len(foreign_joints)} 个 全部在位 ✓")
+        L.append("  场景物体接口完整 ✓")
 
-    # qpos 映射完整性
+    # State mapping.
     if bridge.missing:
-        fatal.append(f"qpos 映射缺少 {len(bridge.missing)} 个关节")
+        fatal.append("状态映射不完整")
     if bridge.covered != bridge.nq_str:
-        fatal.append(f"qpos 桥覆盖 {bridge.covered}/{bridge.nq_str}，映射不完整")
+        fatal.append("状态映射覆盖不完整")
     else:
-        L.append(f"  qpos 桥 {bridge.nq_str}→{bridge.nq_full} 覆盖完整 ✓")
+        L.append("  状态映射完整 ✓")
 
-    # 随机样本的往返一致性
+    # State round-trip consistency.
     rng = np.random.default_rng(0)
     probe = rng.normal(size=bridge.nq_str)
     padded = bridge.pad(probe)
     if padded.size != bridge.nq_full:
-        fatal.append(f"补全后长度 {padded.size} != {bridge.nq_full}")
+        fatal.append("状态映射输出维度不一致")
     else:
         err = max((abs(padded[f:f + w] - probe[s:s + w]).max()
                    for s, f, w in bridge.pairs), default=0.0)
         if err > 1e-12:
-            fatal.append(f"qpos 往返校验误差 {err:.3e}")
+            fatal.append("状态往返校验未通过")
         else:
-            L.append("  补全往返逐位一致 ✓")
+            L.append("  状态往返校验通过 ✓")
 
     if fatal:
         L.append("  ✗ 模型配置检查未通过:")
@@ -378,10 +371,10 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
 
 
 # ---------------------------------------------------------------------------
-# 应用任务模型的碰撞配置
+# 任务模型碰撞配置
 # ---------------------------------------------------------------------------
 def kill_stripped_collision(mj, md, agent_name: str, keep=KEEP_DEFAULT):
-    """将非控制链 agent geom 设置为非碰撞几何体。"""
+    """Apply the task collision configuration."""
     import mujoco
     prefix = f"{agent_name}_"
     keep_tokens = tuple(k.replace("_joint", "").replace("joint", "") for k in keep)
@@ -484,9 +477,7 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
             n_bake = apply_named_qpos(mj_full, md_full, bake_qpos or {})
             xml, baked_bodies = bake_dropped_bodies(xml, mj_full, md_full, drop)
             if n_bake or baked_bodies:
-                log(
-                    f"[MODEL] 已应用参考姿态：joint={n_bake}, body={len(baked_bodies)}"
-                )
+                log("[MODEL] 参考姿态已应用")
 
             new_xml, rep = strip_xml(xml, drop)
             new_xml, clamped_btns = clamp_button_joints(new_xml, range_max=0.001)
@@ -506,13 +497,7 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
                 keep_joints=kept, foreign_joints=foreign,
             )
 
-            head = [
-                f"[MODEL] 任务模型检查 agent={agent_name}",
-                f"  控制链关节={len(kept)}，场景关节={len(foreign)}",
-                f"  关联资源: actuator={len(rep['actuator'])} "
-                f"equality={len(rep['equality'])} sensor={len(rep['sensor'])} "
-                f"tendon={len(rep['tendon'])} other={len(rep['other_ref'])}",
-            ]
+            head = [f"[MODEL] 正在检查任务模型配置：{agent_name}"]
             body = head + lines
             for ln in body:
                 log(ln)
@@ -571,7 +556,7 @@ def finish_install(env, handle: StripHandle, agent_name: str,
     n = kill_stripped_collision(mj, md, agent_name, keep)
     handle.n_col_off = n
     handle._want_col_off = False
-    log(f"[MODEL] 任务碰撞配置已应用，更新 geom={n}")
+    log("[MODEL] 任务碰撞配置已应用")
 
 
 # ---------------------------------------------------------------------------
@@ -640,17 +625,7 @@ def _self_test() -> int:
     all_j = [mujoco.mj_id2name(mj_full, mujoco.mjtObj.mjOBJ_JOINT, i)
              for i in range(int(mj_full.njnt))]
     drop, kept, foreign = plan_strip(all_j, "ag")
-    print(
-        f"\n关节配置：控制链={len(kept)}，场景={len(foreign)}，"
-        f"配置项={len(drop)}"
-    )
-
     new_xml, rep = strip_xml(_TOY, drop)
-    print(
-        f"关联资源：actuator={len(rep['actuator'])}，"
-        f"equality={len(rep['equality'])}，sensor={len(rep['sensor'])}"
-    )
-
     mj_str = mujoco.MjModel.from_xml_string(new_xml)
     bridge = QposBridge(mj_full, md_full, mj_str)
     ok, lines = safety_check(mj_full, mj_str, bridge,
@@ -666,7 +641,7 @@ def _self_test() -> int:
         mujoco.mj_step(mj_str, md_str)
     print("\n任务模型连续步进检查完成")
     n = kill_stripped_collision(mj_str, md_str, "ag")
-    print(f"碰撞配置检查完成，geom={n}")
+    print("碰撞配置检查完成")
     print("\n" + ("✓ 自检通过" if ok else "✗ 自检未通过"))
     return 0 if ok else 1
 
@@ -694,10 +669,7 @@ def _probe_live(addr: str, agent_name: str | None) -> int:
         dq = 0
         for n in sorted(drop):
             dq += 7 if "floating_base" in n else 1
-        print(
-            f"任务模型检查：控制链={len(kept)}，场景={len(foreign)}，"
-            f"配置项={len(drop)}"
-        )
+        print("任务模型兼容性检查完成")
         return 0
 
     return asyncio.run(go())

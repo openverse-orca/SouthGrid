@@ -68,16 +68,10 @@
       <layer texture="brushedmetal_normal" role="normal" />
       <layer texture="brushedmetal_packed" role="roughness" />
     </material>
-    <!-- <material name="composite_black" metallic="0.0" roughness="0.9" rgba="0.12 0.12 0.15 1">
-      <layer texture="composite_black_basecolor" role="rgb" />
-      <layer texture="composite_black_normal" role="normal" />
-      <layer texture="composite_black_packed" role="roughness" />
-    </material> -->
 
     <material name="composite_black" metallic="0.0" roughness="0.9" rgba="0.12 0.12 0.15 1">
       <layer texture="composite_black_basecolor" role="rgb" />
       <layer texture="composite_black_normal" role="normal" />
-      <!-- <layer texture="composite_black_packed" swizzle="b b b 1" role="roughness" /> -->
     </material >
 
     <material name="paint_grey" metallic="0.1" roughness="0.55" rgba="0.6 0.65 0.72 1">
@@ -116,7 +110,6 @@
             <body name="head_link2" pos="0.050238 0 0.060065" quat="0.707107 -0.707107 0 0">
               <body name="camera_head_body1" pos="0.077 -0.072 -0.011">
                 <geom type="sphere" size="0.001"/>
-                <!-- <body name="camera_head_body2" euler="1.5707 0.7853 -1.5707"> -->
                 <body name="camera_head_body2" euler="1.5707 0.5235 -1.5707 ">
                   <geom type="sphere" size="0.001"/>
                   <camera name="camera_head" resolution="640 480" fovy="90"/>

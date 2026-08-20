@@ -80,7 +80,7 @@ python g1_omnipicker_collection_scripted_tool_lerobot.py \
 | `--orcagym_addr` | OrcaGym 服务地址 | `localhost:50051` | 服务不在本机默认端口时 |
 | `--randomize` | 每个 episode 随机排列槽位 | 未启用 | 需要随机化抓取顺序时追加该参数 |
 | `--seed` | 随机化基础种子 | 未设置 | 需要可复现的随机顺序时 |
-| `--num_tools` | 本集实际抓取的工具数量 | `5` | 调试时只抓前几把工具时 |
+| `--num_tools` | 本集实际抓取的工具数量 | `5` | 只采集前几把工具时 |
 | `--tools` | 要抓的工具编号，从 1 开始，逗号分隔 | 空，按 `--num_tools` 取前 N 把 | 只抓指定编号的工具时 |
 | `--speed` | 轨迹整体提速倍率 | `1.0` | 需要加快或放慢脚本化轨迹时 |
 

@@ -3,7 +3,7 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "orca-manipulation"
+name = "southgrid"
 version = "0.1.0"
 description = "SouthGrid manipulation examples for OrcaGym"
 requires-python = ">=3.12,<3.13"

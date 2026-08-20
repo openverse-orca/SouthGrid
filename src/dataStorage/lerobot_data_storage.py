@@ -1,32 +1,13 @@
-"""LeRobot v2.1 格式数据存储层（NVENC 流式编码版）。
+"""LeRobot dataset storage with streaming NVENC video encoding.
 
-设计要点（流式对齐，streaming by construction）：
-    默认主时钟 = 墙钟 time.perf_counter()（VR 遥操作用）。collection_data() 在每个
-    控制步被调用，但只在时钟跨过 k/fps 边界时才处理一帧：
-        - 维护「上一帧」_lr_prev，在每次跨边界时把 (state_prev, action=state_cur, images_prev)
-          通过 stream_frame() 推入 NVENC 流式编码器（GPU），同时 add_frame() 更新元数据缓冲。
-        - 不再写 PNG 到磁盘，彻底去除 PNG 磁盘往返（旧架构卡顿/CPU 争抢的根因）。
-    episode 成功后 save_data() 调用 flush_episode()：
-        1. StreamingNvencEncoder.end_episode()：等待 GPU 编码完成，mp4 直接落盘（通常 <1s）。
-        2. save_episode_data_only()：写 parquet + meta，主线程同步，返回即落盘。
-        3. encode_episode_videos()：mp4 已存在故跳过编码；ep0 调用 update_video_info()。
+Frames are sampled on the configured wall or simulation clock. Each emitted frame
+pairs the previous observation with the next state-derived action, then streams
+camera images to the selected encoder backend while buffering dataset metadata.
+Successful episodes flush MP4, parquet, statistics, and metadata before returning.
 
-线程职责：
-    T0（主线程）：控制→物理→渲染→取帧→stream_frame()（push GPU 队列）→ flush_episode()
-    T1-T3（每相机 nvenc worker）：消费帧队列，av1_nvenc 编码 → mp4（GPU，几乎不占 CPU）。
-
-State/action 布局（各机器人不同，由子类 build_state() 决定）：
-    g1_omnipicker (18 维)：l_pos(3) + l_quat_xyzw(4) + r_pos(3) + r_quat_xyzw(4)
-                            + l_grip_inner_norm(1) + l_grip_outer_norm(1)
-                            + r_grip_inner_norm(1) + r_grip_outer_norm(1)
-    openloong (16 维)：l_pos(3) + l_quat_xyzw(4) + r_pos(3) + r_quat_xyzw(4) + l_grip(1) + r_grip(1)
-    tiangong2 (38 维)：l_pos(3) + l_quat_xyzw(4) + r_pos(3) + r_quat_xyzw(4) + effector_motor_norm(24)
-
-    默认 action[i] = state[i+1]（绝对 next-step，与 v5/openpi 一致）。
-    子类可覆盖 build_action(state_prev, state_cur) 改为 Δq 等相对量
-   （LeRobot/UMI：relative = target − current_state；g1_pick 用此约定）。
-
-运行环境：orcalab_lerobot（含 lerobot 0.3.x + orca_gym 26.6.x + av + pyarrow）。
+State and action schemas are defined by each robot-specific subclass. By default,
+``action[i] = state[i+1]``; subclasses may provide another documented action schema.
+The validated runtime uses LeRobot 0.3.x, OrcaGym 26.7.3, PyAV, and PyArrow.
 """
 from __future__ import annotations
 
@@ -61,10 +42,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # 模块日志器
 # ---------------------------------------------------------------------------
-# 注意：不能用裸 _log.info()。采集脚本通过 get_orca_logger() 只配置了它自己的具名
-# logger，根 logger 仍是默认的 WARNING + 无 handler，因此本模块此前所有 _log.info()
-# 都被静默丢弃（[LeRobot] 相关消息从未出现在日志文件里）。这里建一个自带 handler 的
-# 具名 logger，并允许调用方用 set_logger() 注入脚本自己的 logger 以合并到同一日志文件。
+# Use a module logger by default; entry points may inject their configured logger.
 _log = logging.getLogger("dataStorage.lerobot")
 if not _log.handlers:
     _h = logging.StreamHandler()
@@ -143,16 +121,12 @@ class _CameraEncodeWorker:
         return (self._width, self._height)
 
     def wait_ready(self, timeout: float = 60.0) -> None:
-        """阻塞到 av1_nvenc 编码器真正 open 完成（含 avcodec_open2）。
-
-        avcodec_open2 是长时间独占 GIL 的 C 调用，实测约 230ms/路，两路相机
-        合计使主线程冻结 ~430ms。在采集区间外调用本方法，可把这段独占挪到
-        无人感知的时刻；采集首帧的 encode 随之降到几毫秒。
+        """Wait until the AV1 NVENC session is ready.
         """
         if not self._ready.wait(timeout):
-            raise TimeoutError(f"NVENC 会话打开超时: {self._path}")
+            raise TimeoutError("NVENC 会话打开超时")
         if self._open_error:
-            raise RuntimeError(f"NVENC 会话打开失败 {self._path}: {self._open_error}")
+            raise RuntimeError("NVENC 会话打开失败")
 
     def push(self, np_rgb: np.ndarray) -> None:
         """推入一帧 RGB uint8 HWC numpy 数组。队列满时丢帧，不阻塞控制线程。"""
@@ -185,9 +159,7 @@ class _CameraEncodeWorker:
             st.width = self._width
             st.height = self._height
             st.options = {"cq": "30", "preset": "p4"}
-            # 显式打开编码器。PyAV 默认把 avcodec_open2 懒到首次 encode()，而这一步
-            # 实测独占 GIL 约 230ms/路：留到集内首帧会把整个主线程冻住（两路 ~430ms）。
-            # 提前 open 不产生任何 packet，因此不影响视频内容。
+            # Open the codec before accepting episode frames.
             st.codec_context.open()
         except BaseException as e:
             self._open_error = repr(e)
@@ -258,9 +230,9 @@ class StreamingNvencEncoder:
         h, w = np_rgb.shape[:2]
         worker = self._workers.get(cam_key)
         if worker is not None and worker.wh != (w, h):
-            # start_episode 预建的尺寸与实际帧不符：宁可重建也不要写出错帧
+            # Recreate the session when the incoming frame size changes.
             _log.warning(
-                f"[NVENC] {cam_key} 预建尺寸 {worker.wh} 与实帧 {(w, h)} 不符，重建会话"
+                f"[视频] {cam_key} 分辨率已变化，正在更新编码会话"
             )
             worker.discard()
             worker = None
@@ -280,10 +252,9 @@ class StreamingNvencEncoder:
         return _CameraEncodeWorker(video_path, self._fps, int(width), int(height))
 
     def start_episode(self, ep_idx: int, height: int, width: int) -> float:
-        """在采集区间外预建本集所有相机的 NVENC 会话，并同步等待编码器 open 完成。
+        """Initialize all camera encoding sessions before episode capture.
 
-        不调用本方法也能工作（push 会惰性创建），但那样 avcodec_open2 的 GIL
-        独占会落在本集首帧上，把主线程冻住约 430ms。返回耗时秒数。
+        Returns the initialization duration in seconds.
         """
         self._ep_idx = int(ep_idx)
         t0 = time.perf_counter()
@@ -294,19 +265,13 @@ class StreamingNvencEncoder:
         for w in self._workers.values():
             w.wait_ready()
         dt = time.perf_counter() - t0
-        _log.info(
-            f"[NVENC] 集 {self._ep_idx} 会话预建完成 "
-            f"cams={list(self._workers)} {int(width)}x{int(height)} "
-            f"耗时 {dt * 1000:.0f}ms（已移出采集区间）"
-        )
+        _log.info("[视频] 本集编码会话已就绪")
         return dt
 
     def prewarm(self, cam_keys: list[str], height: int, width: int) -> float:
-        """用假帧跑通一次性 av1_nvenc 会话，建立进程级 CUDA / NVENC 上下文。
+        """Initialize the process-level AV1 NVENC context.
 
-        注意：avcodec_open2 的 ~230ms 开销是**每会话**的，本方法减免不了它——
-        每集真正的会话由 start_episode() 在采集区间外预先 open。这里只负责摊掉
-        首个会话额外的驱动初始化。返回耗时秒数，不污染正式 episode 的视频路径。
+        Returns the initialization duration in seconds.
         """
         import tempfile
 
@@ -314,14 +279,14 @@ class StreamingNvencEncoder:
         h, w = int(height), int(width)
         dummy = np.zeros((h, w, 3), dtype=np.uint8)
         for cam_key in cam_keys:
-            tmp = Path(tempfile.gettempdir()) / f"_nvenc_prewarm_{cam_key}_{os.getpid()}.mp4"
+            tmp = Path(tempfile.gettempdir()) / f"southgrid_encoder_check_{cam_key}_{os.getpid()}.mp4"
             worker = None
             try:
                 worker = _CameraEncodeWorker(tmp, self._fps, w, h)
                 worker.push(dummy)
                 worker.finish()
             except Exception as e:
-                _log.warning(f"[NVENC] prewarm {cam_key} 失败: {e}")
+                _log.warning(f"[视频] {cam_key} 编码器预初始化失败")
                 if worker is not None:
                     try:
                         worker.discard()
@@ -334,9 +299,7 @@ class StreamingNvencEncoder:
                 except Exception:
                     pass
         dt = time.perf_counter() - t0
-        _log.info(
-            f"[NVENC] prewarm 完成 cams={list(cam_keys)} {w}x{h} 耗时 {dt*1000:.0f}ms"
-        )
+        _log.info("[视频] 编码器预初始化完成")
         return dt
 
     def end_episode(self) -> None:
@@ -347,12 +310,12 @@ class StreamingNvencEncoder:
         # ep_idx 保留，等 cleanup_episode() 清理
 
     def cleanup_episode(self) -> None:
-        """清理 add_frame 遗留的临时目录（含统计用 PNG），重置 ep_idx。"""
+        """Clean episode image files and reset the episode index."""
         self._cleanup_tmp_dirs()
         self._ep_idx = None
 
     def discard_episode(self) -> None:
-        """丢弃本集帧，删除半成品 mp4，清理临时目录。"""
+        """Discard the current episode and remove its incomplete files."""
         for w in self._workers.values():
             w.discard()
         self._cleanup_tmp_dirs()
@@ -360,7 +323,7 @@ class StreamingNvencEncoder:
         self._ep_idx = None
 
     def _cleanup_tmp_dirs(self) -> None:
-        """删除 add_frame 遗留的临时 PNG 目录。"""
+        """Remove episode image files after finalization."""
         if self._ep_idx is None:
             return
         try:
@@ -383,20 +346,14 @@ class StreamingNvencEncoder:
 
 
 # ---------------------------------------------------------------------------
-# 统计用图像写盘器（有界队列 + 背压，避免把内存泄漏从 buffer 搬进队列）
+# Statistics-image writer with a bounded queue.
 # ---------------------------------------------------------------------------
 
 class _StatsImageWriter:
-    """异步 JPEG 写盘器：把 episode_buffer 里的统计用帧写到临时文件，
-    供 compute_episode_stats 读取，使 buffer 内只保留路径字符串（~50B/帧）。
+    """Write statistics JPEGs through a bounded background queue.
 
-    设计要点：
-    - 有界队列（maxsize=128）：满时阻塞，提供背压，防止队列自身无限增长。
-    - 3 个 daemon 线程：并行写盘，覆盖 2 相机 × 约 3-4ms/帧 JPEG 编码。
-    - wait_until_done()：用 queue.join() 排空，保证 stats 计算时所有文件已落盘。
-    - drop_pending()：discard 路径调用；先清空队列中未取的条目（自行 task_done），
-      再等当前在途写操作完成，之后 rmtree 不会产生孤儿文件。
-    - stop()：发哨兵 + join 线程，幂等。
+    ``wait_until_done`` flushes pending images, ``drop_pending`` discards an
+    unfinished episode, and ``stop`` terminates the worker threads.
     """
 
     _STOP = object()
@@ -448,9 +405,7 @@ class _StatsImageWriter:
 
     def _worker(self) -> None:
         quality_flag = [cv2.IMWRITE_JPEG_QUALITY, self._jpeg_quality]
-        # lerobot compute_stats.sample_images → auto_downsample_height_width
-        # 会把 max(h,w)>=300 的图按整数步长降到 ~150；480x640 → 120x160。
-        # 写盘前先做同样降采样，JPEG 成本约降 16 倍，消费端不再二次降采样。
+        # Match the image downsampling used by LeRobot episode statistics.
         _ds_thresh = 300
         _ds_target = 150
         while True:
@@ -474,9 +429,9 @@ class _StatsImageWriter:
                     bgr = image
                 ok = cv2.imwrite(str(fpath), bgr, quality_flag)
                 if not ok:
-                    _log.warning(f"[StatsWriter] 写盘失败: {fpath}")
+                    _log.warning("[LeRobot] 图像统计文件写入失败")
             except Exception as e:
-                _log.warning(f"[StatsWriter] 写盘失败 {fpath}: {e}")
+                _log.warning("[LeRobot] 图像统计文件写入失败")
             finally:
                 self._q.task_done()
 
@@ -540,8 +495,8 @@ class LeRobotDatasetWriter:
         g1_pick 等 Δq 数据集应显式传入不同的 action_names。
 
         encode_backend:
-            "inproc"  — 同进程线程编码（默认，兼容旧脚本）
-            "subproc" — 独立 forkserver 子进程编码 + JPEG，消除 GIL 冻结
+            "inproc"  — 同进程线程编码
+            "subproc" — 独立 forkserver 子进程编码与 JPEG 写入
         """
         backend = str(encode_backend or "inproc").strip().lower()
         if backend not in ("inproc", "subproc"):
@@ -569,7 +524,7 @@ class LeRobotDatasetWriter:
                 download_videos=False,
                 tolerance_s=0.0001,
             )
-            # 防止同 shape、不同语义的旧数据集被静默续写（例如旧 EE-28 与新 q/Δq-28）
+            # Resume only when stored feature names match the requested schema.
             def _flat_names(raw) -> list[str]:
                 if raw is None:
                     return []
@@ -583,19 +538,14 @@ class LeRobotDatasetWriter:
                 prev_action_names = _flat_names(feats["action"]["names"])
                 if prev_state_names != list(state_names) or prev_action_names != act_names:
                     raise ValueError(
-                        "[resume] 数据集 feature names 与当前 schema 不一致，拒绝续写以避免"
-                        "静默污染。请换新 --lerobot_out，或删除旧数据集后重采。\n"
-                        f"  old.state[:3]={prev_state_names[:3]}\n"
-                        f"  new.state[:3]={list(state_names)[:3]}\n"
-                        f"  old.action[:3]={prev_action_names[:3]}\n"
-                        f"  new.action[:3]={act_names[:3]}"
+                        "[resume] 数据集的 state/action 字段与当前配置不一致。"
+                        "请使用新的 --lerobot_out，或确认后重新创建目标数据集。"
                     )
             except KeyError as e:
                 raise ValueError(f"[resume] 数据集缺少 feature 字段: {e}") from e
             dataset.episode_buffer = dataset.create_episode_buffer()
             print(
-                f"[resume] 已加载 {dataset.num_episodes} 集 / "
-                f"{dataset.num_frames} 帧 (root={root})"
+                f"[resume] 已加载 {dataset.num_episodes} 集 / {dataset.num_frames} 帧"
             )
         else:
             if Path(root).exists() and not resume:
@@ -668,15 +618,12 @@ class LeRobotDatasetWriter:
             )
             stats_writer = None
             dataset._save_image = lambda image, fpath: None
-            _log.info(
-                f"[LeRobot] encode_backend=subproc "
-                f"ring_slots={enc_ring_slots} cams={list(cams)} {w}x{h}"
-            )
+            _log.info("[LeRobot] 视频编码服务已启用")
         else:
             stats_writer = _StatsImageWriter(maxsize=128, num_threads=1, jpeg_quality=95)
             dataset._save_image = lambda image, fpath: stats_writer.push(image, fpath)
             nvenc_enc = StreamingNvencEncoder(dataset, int(fps))
-            _log.info("[LeRobot] encode_backend=inproc")
+            _log.info("[LeRobot] 视频编码器已启用")
 
         return cls(dataset, nvenc_enc, stats_writer, encode_backend=backend)
 
@@ -700,12 +647,7 @@ class LeRobotDatasetWriter:
             pass
 
     def prepare_episode(self, height: int, width: int) -> float:
-        """在开始采集前预建本集编码会话，把 avcodec_open2 移出控制环。
-
-        应在采集区间之外调用（例如等待 squeeze 的 IDLE 阶段）：此时主线程被
-        NVENC 会话创建饿住几百毫秒不会被感知，而集内首帧就不会再冻结。
-        subproc 后端不存在该问题，此处为空操作。
-        """
+        """Initialize the episode encoding session before capture begins."""
         fn = getattr(self._nvenc_enc, "start_episode", None)
         if not callable(fn):
             return 0.0
@@ -713,11 +655,11 @@ class LeRobotDatasetWriter:
             ep_idx = int(self._dataset.meta.total_episodes)
             return float(fn(ep_idx, int(height), int(width)) or 0.0)
         except Exception as e:
-            _log.warning(f"[NVENC] 预建会话失败，退回首帧惰性创建: {e}")
+            _log.warning("[视频] 预初始化不可用，将在接收首帧时创建编码会话")
             return 0.0
 
     def stream_frame(self, frame: dict, task: str) -> None:
-        """流式写入一帧：图像推 NVENC（inproc 队列 / subproc shm），state/action 进 buffer。"""
+        """Stream camera images and append state/action data for one frame."""
         import time as _time
         _t0 = _time.perf_counter()
         for k, v in frame.items():
@@ -739,13 +681,10 @@ class LeRobotDatasetWriter:
         _nvenc_ms = (_t1 - _t0) * 1000.0
         _add_ms   = (_t2 - _t1) * 1000.0
         if _nvenc_ms > 30.0 or _add_ms > 30.0:
-            _log.warning(
-                f"[STREAM_FRAME] nvenc_push={_nvenc_ms:.1f}ms "
-                f"add_frame={_add_ms:.1f}ms  total={(_nvenc_ms + _add_ms):.1f}ms"
-            )
+            _log.warning("[LeRobot] 当前帧写入耗时较长")
 
     def flush_episode(self) -> int:
-        """GPU 编码完成 + parquet+meta 落盘。全程同步，通常 <2s。"""
+        """Finalize video, parquet, statistics, and episode metadata."""
         # subproc 子进程若已死，拒绝写出缺 mp4 的坏集
         if getattr(self._nvenc_enc, "is_dead", False):
             raise RuntimeError(
@@ -762,7 +701,7 @@ class LeRobotDatasetWriter:
         if self._stats_writer is not None:
             # inproc：必须先排空写盘队列，再计算 stats
             _log.info(
-                f"[LeRobot] mp4 写入完成（{t_enc * 1000:.0f}ms），等待临时 JPEG 写盘完成…"
+                "[LeRobot] 视频已写入，正在完成图像统计…"
             )
             t0 = time.perf_counter()
             self._stats_writer.wait_until_done()
@@ -770,23 +709,18 @@ class LeRobotDatasetWriter:
         else:
             # subproc：END_EP ack 已保证 JPEG 落盘
             _log.info(
-                f"[LeRobot] mp4+JPEG 已由编码子进程完成（{t_enc * 1000:.0f}ms）"
+                "[LeRobot] 视频与图像统计已写入"
             )
 
-        _log.info(f"[LeRobot] JPEG 就绪（{t_jpg * 1000:.0f}ms），落盘 parquet+meta…")
+        _log.info("[LeRobot] 正在写入回合数据与元信息…")
         t0 = time.perf_counter()
         ep_idx = self._dataset.save_episode_data_only()
         t_meta = time.perf_counter() - t0
 
-        # 立即删除临时 JPEG 目录（stats 已算完，文件不再需要）
-        # subproc：CLEANUP_EP 异步下发，不等 ack
+        # Statistics images are no longer needed after episode finalization.
         self._nvenc_enc.cleanup_episode()
 
-        _log.info(
-            f"✓  [LeRobot] Episode {ep_idx} 已落盘"
-            f"（NVENC {t_enc * 1000:.0f}ms + JPEG {t_jpg * 1000:.0f}ms"
-            f" + meta {t_meta * 1000:.0f}ms） backend={self._encode_backend}"
-        )
+        _log.info(f"✓  [LeRobot] Episode {ep_idx} 已保存")
         # mp4 已存在故跳过编码；ep0 需调用以写 info.json（update_video_info）
         self._dataset.encode_episode_videos(ep_idx)
         self._saved_episodes += 1
@@ -906,7 +840,7 @@ class LeRobotSimSyncMixin:
         )
         _cam_ms = (time.perf_counter() - _cam_t0) * 1000.0
         if _cam_ms > 20.0:
-            _log.warning(f"[CAM_CAPTURE] 相机帧捕获阻塞: {_cam_ms:.1f}ms")
+            _log.warning("[相机] 当前帧读取耗时较长")
 
         if self._lr_prev is not None:
             state_prev, images_prev, _ = self._lr_prev
@@ -1003,7 +937,7 @@ class LeRobotSimSyncMixin:
                 shutil.rmtree(unit)
             self.get_next_unit_path()
         except Exception as e:
-            _log.warning(f"[LeRobot] clear_data 清理 unit_path 失败（可忽略）: {e}")
+            _log.warning("[LeRobot] 未能完整清理当前数据单元目录")
 
     def _reset_episode(self) -> None:
         self._lr_prev: tuple | None = None
@@ -1029,13 +963,11 @@ class LeRobotSimSyncMixin:
             ratio = cam_frames / written if written > 0 else 0.0
             if ratio < 0.5:
                 _log.warning(
-                    f"[LeRobot][对齐] {env_name}: 相机新增 {cam_frames} 帧 vs "
-                    f"采集 {written} 帧（比率 {ratio:.2f}），大量重复帧"
+                    f"[LeRobot][相机] {env_name} 更新率偏低（相对采集率 {ratio:.2f}）"
                 )
             else:
                 _log.info(
-                    f"[LeRobot][对齐] {env_name}: 相机新增 {cam_frames} 帧 / "
-                    f"采集 {written} 帧 / 比率 {ratio:.2f}"
+                    f"[LeRobot][相机] {env_name} 帧同步正常"
                 )
 
 

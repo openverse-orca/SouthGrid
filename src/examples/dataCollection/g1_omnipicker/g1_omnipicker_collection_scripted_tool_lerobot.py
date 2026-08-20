@@ -950,7 +950,7 @@ def _build_tool_segments(
     wps 支持 4 或 6 个路点 dict（pos/quat/grip）：
       4 点: wp0接近 / wp1抓取 / wp2箱上方 / wp3松开
       6 点: wp0接近 / wp1抓取 / wp2经由1 / wp3经由2 / wp4箱上方 / wp5松开
-            （经由插在原放箱 3/4 之前）
+            （在放箱阶段 3/4 之前执行）
     """
     wps = list(wps)
     n = len(wps)

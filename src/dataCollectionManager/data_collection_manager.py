@@ -350,7 +350,7 @@ class DataCollectionManager:
                     current_dir_name = os.path.basename(unit_path)
                     if current_dir_name == "":
                         current_dir_name = os.path.basename(os.path.dirname(unit_path))
-                    orca_logger.info(f"Replay data unit: {unit_path}")
+                    orca_logger.info(f"Replay data unit: {current_dir_name}")
                     replay_msg = shorten(
                         f"回放目录: {current_dir_name}", width=80, placeholder="..."
                     )
@@ -425,7 +425,7 @@ class DataCollectionManager:
             orca_logger.info(f"Captured initial state for {len(result)} joints")
             return result
         except Exception as e:
-            orca_logger.warning(f"Capture initial joint qpos failed: {e}")
+            orca_logger.warning("Unable to capture the initial robot state")
             return {}
 
     def _restore_initial_joint_qpos(self, initial_joint_qpos: dict) -> bool:
@@ -460,7 +460,7 @@ class DataCollectionManager:
             )
             return True
         except Exception as e:
-            orca_logger.warning(f"Restore initial joint qpos failed: {e}")
+            orca_logger.warning("Unable to restore the initial robot state")
             return False
 
     def run_episode(self):
@@ -500,7 +500,7 @@ class DataCollectionManager:
                         unit_path = None
                         if self.data_storage is not None:
                             unit_path = self.data_storage.get_current_unit_path()
-                            orca_logger.info(f"Start recording data unit: {unit_path}")
+                            orca_logger.info(f"Start recording data unit: {os.path.basename(unit_path)}")
                         else:
                             orca_logger.info("Start recording data unit")
                         if (
@@ -533,7 +533,7 @@ class DataCollectionManager:
                         unit_path = None
                         if self.data_storage is not None:
                             unit_path = self.data_storage.get_current_unit_path()
-                            orca_logger.info(f"Stop recording data unit: {unit_path}")
+                            orca_logger.info(f"Stop recording data unit: {os.path.basename(unit_path)}")
                         else:
                             orca_logger.info("Stop recording data unit")
                         if (

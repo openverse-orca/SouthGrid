@@ -28,10 +28,10 @@ ENTRY_POINT = "envs.dataCollection.dataCollection_env:DataCollectionEnv"
 
 base_dir = os.path.dirname(os.path.realpath(__file__))
 log_dir = os.path.join(base_dir, "logs")
-log_file = "scripted_grasp.log"
+log_file = "data_collection_scripted.log"
 
 orca_logger = get_orca_logger(
-    name="ScriptedGrasp",
+    name="SouthGridScriptedCollection",
     log_file=log_file,
     max_bytes=10 * 1024 * 1024,
     backup_count=5,

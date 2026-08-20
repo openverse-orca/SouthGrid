@@ -1,10 +1,7 @@
-"""独立编码子进程：NVENC (av1_nvenc) + 统计 JPEG 写盘。
+"""NVENC video and statistics-image worker process.
 
-主进程只做 shm memcpy + 短消息；子进程拥有自己的 GIL / CUDA 上下文，
-从根上消除 avcodec_open2 / cv2.imwrite 对主控制循环的 GIL 阻塞。
-
-启动方式：scoped ``multiprocessing.get_context("forkserver")``，
-不调用全局 ``set_start_method``，避免影响调用方的多进程配置。
+Frames are transferred through a bounded shared-memory ring. The worker owns its
+encoding resources and uses a scoped ``forkserver`` multiprocessing context.
 """
 from __future__ import annotations
 
@@ -80,7 +77,7 @@ class FrameRing:
             self._shm = shared_memory.SharedMemory(name=name, create=False)
             self.name = name
             self._created = False
-            # 子进程不应在退出时 unlink；取消 resource_tracker 登记（bpo-38119）
+            # Attached processes do not own shared-memory unlinking.
             try:
                 from multiprocessing import resource_tracker
 
@@ -113,11 +110,11 @@ class FrameRing:
             pass
 
     def close_and_unlink(self) -> None:
-        """主进程关闭并销毁 shm，同时从 resource_tracker 注销，避免退出时 KeyError。"""
+        """Close and release shared memory owned by this process."""
         name = getattr(self._shm, "_name", None)
         self.close()
         if self._created:
-            # 先从 tracker 摘掉，再 unlink，避免退出钩子二次清理
+            # Release tracker ownership before unlinking.
             if name:
                 try:
                     from multiprocessing import resource_tracker
@@ -133,7 +130,7 @@ class FrameRing:
 # 子进程内：单相机 NVENC 线程
 # ---------------------------------------------------------------------------
 
-# 子进程内串行化 NVENC 会话创建，避免多相机同时 avcodec_open2 触发 libnvcuvid segfault
+# Serialize NVENC session and encode operations across camera workers.
 _NVENC_OPEN_LOCK = threading.Lock()
 
 
@@ -172,9 +169,9 @@ class _ChildNvencWorker:
             target=self._worker, daemon=True, name=f"nvenc_{self._path.stem}"
         )
         self._thread.start()
-        # 等会话创建完成再返回，保证 START_EP 阶段串行打开
+        # Wait until the encoder session is ready.
         if not self._ready.wait(timeout=60.0):
-            raise TimeoutError(f"NVENC open timeout: {self._path}")
+            raise TimeoutError("NVENC session open timeout")
         if self._open_error:
             raise RuntimeError(self._open_error)
 
@@ -182,8 +179,7 @@ class _ChildNvencWorker:
         qs = self._q.qsize()
         if qs > self.max_qsize:
             self.max_qsize = qs
-        # 拷贝出 shm，立刻允许 slot 在 JPEG 侧独立释放；
-        # NVENC 持有的是私有副本，避免与 JPEG 争用同一 view。
+        # Copy the shared-memory frame so each consumer owns its buffer.
         self._q.put((slot, np.ascontiguousarray(frame)))
         self.pushed += 1
 
@@ -242,7 +238,7 @@ class _ChildNvencWorker:
                     av_frame = av.VideoFrame.from_ndarray(arr, format="rgb24")
                     av_frame.pts = frame_idx
                     frame_idx += 1
-                    # libnvcuvid 非线程安全：多相机 encode 必须串行
+                    # Camera workers share the serialized encoder section.
                     with self._open_lock:
                         pkt = st.encode(av_frame)
                         if pkt:
@@ -369,7 +365,7 @@ def encoder_worker_main(
                         except Exception:
                             pass
             except Exception as e:
-                _log.warning(f"[ENC-PROC] JPEG 写盘失败: {e}")
+                _log.warning("[编码] 图像统计文件写入失败")
             finally:
                 with jpg_lock:
                     jpg_inflight = max(0, jpg_inflight - 1)
@@ -436,7 +432,7 @@ def encoder_worker_main(
                 else:
                     w.finish()
             except Exception as e:
-                _log.warning(f"[ENC-PROC] worker 结束异常: {e}")
+                _log.warning("[编码] 编码任务未能正常结束")
 
     def _wait_jpg_idle(timeout: float = 120.0) -> None:
         t0 = time.perf_counter()
@@ -446,7 +442,7 @@ def encoder_worker_main(
             if not busy:
                 break
             if time.perf_counter() - t0 > timeout:
-                _log.warning("[ENC-PROC] JPEG 队列等待超时")
+                _log.warning("[编码] 图像统计写入超时")
                 break
             time.sleep(0.005)
 
@@ -524,7 +520,7 @@ def encoder_worker_main(
                     except queue.Full:
                         # JPEG 可丢（仅统计用）；仍需 release 一次
                         _release(int(slot))
-                        _log.warning("[ENC-PROC] JPEG 队列满，跳过统计帧")
+                        _log.warning("[编码] 图像统计队列已满，跳过当前统计帧")
                 continue
 
             if op == OP_END_EP:
@@ -623,7 +619,7 @@ def encoder_worker_main(
                 cams = list(meta.get("cam_keys", ["prewarm"]))
                 dummy = np.zeros((h, w_, 3), dtype=np.uint8)
                 for ck in cams:
-                    tmp = Path(tempfile.gettempdir()) / f"_nvenc_prewarm_{ck}_{os.getpid()}.mp4"
+                    tmp = Path(tempfile.gettempdir()) / f"southgrid_encoder_check_{ck}_{os.getpid()}.mp4"
                     container = None
                     try:
                         with _NVENC_OPEN_LOCK:
@@ -644,7 +640,7 @@ def encoder_worker_main(
                             container.close()
                             container = None
                     except Exception as e:
-                        _log.warning(f"[ENC-PROC] prewarm {ck} 失败: {e}")
+                        _log.warning(f"[编码] {ck} 预初始化失败")
                     finally:
                         if container is not None:
                             try:
@@ -658,7 +654,7 @@ def encoder_worker_main(
                         except Exception:
                             pass
                 dt = time.perf_counter() - t0
-                # 给 NVENC 驱动一点时间回收会话，降低紧接着 START_EP 时的偶发 segfault
+                # Allow encoder resources to settle before the next episode.
                 time.sleep(0.15)
                 try:
                     ack_q.put({"type": "prewarm_done", "dt": dt})
@@ -666,14 +662,11 @@ def encoder_worker_main(
                     pass
                 continue
 
-            _log.warning(f"[ENC-PROC] 未知 opcode={op}")
+            _log.warning("[编码] 收到不支持的编码命令")
     except Exception as e:
-        import traceback
-
-        tb = traceback.format_exc()
-        _log.error(f"[ENC-PROC] 子进程异常退出: {e}\n{tb}")
+        _log.error("[编码] 编码服务异常退出")
         try:
-            Path("/tmp/enc_child_crash.txt").write_text(tb)
+            Path("/tmp/southgrid_encoder_error.txt").write_text(str(e))
         except Exception:
             pass
         try:
@@ -737,7 +730,7 @@ class EncoderProcClient:
         self._block_events = 0
         self._closed = False
 
-        # 本地缓存的子进程统计（探针只读这里，不做 IPC）
+        # Cached encoder statistics.
         self._cached_nvenc: list[dict] = []
         self._cached_jpeg: dict = {
             "pushed": 0,
@@ -753,17 +746,17 @@ class EncoderProcClient:
         self._ring = FrameRing(ring_slots, self._height, self._width, create=True)
         self._free: deque[int] = deque(range(ring_slots))
 
-        # scoped forkserver，不改全局 start_method
+        # Use a scoped forkserver context.
         self._ctx = mp.get_context("forkserver")
         try:
-            # 覆盖默认 preload=["__main__"]，避免子进程 re-import 主脚本
+            # Preload the worker module in the forkserver.
             mp.set_forkserver_preload(["dataStorage.encoder_proc"])
         except Exception as e:
-            _log.warning(f"[ENC-PROC] set_forkserver_preload 失败（可忽略）: {e}")
+            _log.warning("[编码] 预加载配置不可用，继续启动编码服务")
 
         self._free_q = self._ctx.Queue(maxsize=ring_slots)
         self._ack_q = self._ctx.Queue()
-        # duplex=False: conn1=recv-only, conn2=send-only → 子进程收、主进程发
+        # Use a one-way command channel from the main process to the worker.
         child_recv, parent_send = self._ctx.Pipe(duplex=False)
         self._cmd = parent_send
 
@@ -783,23 +776,19 @@ class EncoderProcClient:
             daemon=True,
         )
         self._proc.start()
-        # 父进程关闭子端 recv
+        # Close the child endpoint in the parent process.
         try:
             child_recv.close()
         except Exception:
             pass
 
-        # 等 ready
+        # Wait for worker readiness.
         ready = self._wait_ack(types=("ready", "error"), timeout=30.0)
         if ready is None or ready.get("type") == "error":
             msg = (ready or {}).get("msg", "timeout waiting ready")
             self._dead = True
-            raise RuntimeError(f"[ENC-PROC] 子进程启动失败: {msg}")
-        _log.info(
-            f"[ENC-PROC] 子进程已就绪 pid={self._proc.pid} "
-            f"ring={ring_slots}x{self._width}x{self._height} "
-            f"shm={self._ring.total_bytes / 1048576.0:.1f}MB"
-        )
+            raise RuntimeError("编码服务启动失败")
+        _log.info("[编码] 编码服务已就绪")
 
     # ── 内部 ──────────────────────────────────────────────────────────────
 
@@ -832,7 +821,7 @@ class EncoderProcClient:
             if "sessions" in msg:
                 self._cached_sessions = int(msg.get("sessions", 0))
         elif t == "error":
-            _log.error(f"[ENC-PROC] 子进程报错: {msg.get('msg')}")
+            _log.error("[编码] 编码服务报告错误")
             self._dead = True
 
     def _wait_ack(self, types: tuple[str, ...], timeout: float) -> dict | None:
@@ -855,7 +844,7 @@ class EncoderProcClient:
             return False
         if self._proc is None or not self._proc.is_alive():
             self._dead = True
-            _log.error("[ENC-PROC] 子进程已死亡")
+            _log.error("[编码] 编码服务已停止")
             return False
         return True
 
@@ -878,7 +867,7 @@ class EncoderProcClient:
         except Exception:
             self._dropped += 1
             _log.error(
-                "[ENC-PROC] 环缓冲耗尽且阻塞超时，丢帧！mp4 将与 parquet 错位"
+                "[编码] 编码缓冲区已满，当前回合的图像与状态可能不同步"
             )
             return None
 
@@ -930,17 +919,17 @@ class EncoderProcClient:
         try:
             self._ensure_episode()
         except Exception as e:
-            _log.error(f"[ENC-PROC] START_EP 失败: {e}")
+            _log.error("[编码] 无法启动本回合编码")
             self._dead = True
             return False
 
         cam_id = self._cam_to_id.get(cam_key)
         if cam_id is None:
-            # 动态登记未知相机
+            # Register a camera stream not present at initialization.
             cam_id = len(self._cam_to_id)
             self._cam_to_id[cam_key] = cam_id
             self._cam_keys.append(cam_key)
-            _log.warning(f"[ENC-PROC] 动态登记相机 {cam_key} -> id={cam_id}（应在 create 时传入）")
+            _log.warning(f"[编码] 已登记相机流: {cam_key}")
 
         slot = self._acquire_slot()
         if slot is None:
@@ -948,15 +937,15 @@ class EncoderProcClient:
 
         arr = np.asarray(np_rgb)
         if arr.shape != (self._height, self._width, 3):
-            # 尺寸不符：尽力写入前缀区域或拒绝
+            # Reject invalid channel layouts; adapt valid RGB frames to the ring size.
             if arr.ndim != 3 or arr.shape[2] != 3:
                 try:
                     self._free_q.put(slot)
                 except Exception:
                     self._free.append(slot)
-                _log.error(f"[ENC-PROC] 帧 shape 非法 {arr.shape}")
+                _log.error(f"[编码] 图像形状不受支持: {arr.shape}")
                 return False
-            # 允许轻微差异：拷贝到槽位时截断/填充
+            # Copy the overlapping RGB region into the fixed-size ring slot.
             dest = self._ring.view(slot)
             dest.fill(0)
             h = min(arr.shape[0], self._height)
@@ -969,7 +958,7 @@ class EncoderProcClient:
         try:
             self._send_frame(int(cam_id), int(slot), jp)
         except Exception as e:
-            _log.error(f"[ENC-PROC] send FRAME 失败: {e}")
+            _log.error("[编码] 无法提交当前图像帧")
             self._dead = True
             try:
                 self._free_q.put(slot)
@@ -1024,7 +1013,7 @@ class EncoderProcClient:
         self._cached_jpeg["bytes_written"] = 0
 
     def prewarm(self, cam_keys: list[str], height: int, width: int) -> float:
-        """在子进程内打开/关闭一次性 NVENC 会话；主进程不碰 CUDA。"""
+        """Initialize the NVENC backend before episode capture."""
         if self._dead or self._closed:
             return 0.0
         meta = {
@@ -1037,24 +1026,20 @@ class EncoderProcClient:
         self._cmd.send_bytes(bytes([OP_PREWARM]) + pickle.dumps(meta, protocol=4))
         ack = self._wait_ack(types=("prewarm_done", "error"), timeout=60.0)
         if ack is None:
-            _log.warning("[ENC-PROC] prewarm 超时")
+            _log.warning("[编码] 编码器预初始化超时")
             return time.perf_counter() - t0
         if ack.get("type") == "error":
-            _log.warning(f"[ENC-PROC] prewarm 失败: {ack.get('msg')}")
+            _log.warning("[编码] 编码器预初始化失败")
             return time.perf_counter() - t0
         dt = float(ack.get("dt", time.perf_counter() - t0))
-        _log.info(
-            f"[ENC-PROC] prewarm 完成 cams={list(cam_keys)} "
-            f"{width}x{height} 耗时 {dt*1000:.0f}ms"
-        )
+        _log.info("[编码] 编码器预初始化完成")
         return dt
 
     def end_episode(self) -> None:
         """同步等待子进程结束本集编码 + JPEG。"""
         if self._dead:
             raise RuntimeError(
-                "[ENC-PROC] 编码子进程已死亡，拒绝 flush（避免写出缺 mp4 的坏集）。"
-                "请丢弃本集并重跑。"
+                "编码服务不可用，无法完成当前回合。请丢弃本回合后重新采集。"
             )
         if not self._ep_started:
             self._ep_idx = None
@@ -1063,10 +1048,10 @@ class EncoderProcClient:
         ack = self._wait_ack(types=("end_done", "error"), timeout=180.0)
         if ack is None:
             self._dead = True
-            raise RuntimeError("[ENC-PROC] end_episode 等待 ack 超时")
+            raise RuntimeError("等待编码完成超时")
         if ack.get("type") == "error":
             self._dead = True
-            raise RuntimeError(f"[ENC-PROC] end_episode 失败: {ack.get('msg')}")
+            raise RuntimeError("本回合编码未完成")
         # 回收 free_q 中的槽位到本地 deque
         while True:
             try:
@@ -1078,7 +1063,7 @@ class EncoderProcClient:
         self._cached_sessions = 0
 
     def cleanup_episode(self) -> None:
-        """异步让子进程 rmtree 临时 JPEG 目录。"""
+        """Request asynchronous cleanup of episode image files."""
         if self._ep_idx is None:
             return
         dirs = []
@@ -1096,7 +1081,7 @@ class EncoderProcClient:
                     bytes([OP_CLEANUP_EP]) + pickle.dumps({"dirs": dirs}, protocol=4)
                 )
             except Exception as e:
-                _log.warning(f"[ENC-PROC] CLEANUP_EP 发送失败，主进程回退 rmtree: {e}")
+                _log.warning("[编码] 后台清理不可用，已在当前进程完成清理")
                 for d in dirs:
                     shutil.rmtree(d, ignore_errors=True)
         elif dirs:
@@ -1112,8 +1097,8 @@ class EncoderProcClient:
                 self._cmd.send_bytes(bytes([OP_DISCARD_EP]))
                 self._wait_ack(types=("discard_done", "error"), timeout=30.0)
             except Exception as e:
-                _log.warning(f"[ENC-PROC] discard 失败: {e}")
-        # 本地再清一次半成品 mp4（子进程也会删）
+                _log.warning("[编码] 未能通知后台丢弃当前回合")
+        # Ensure incomplete episode video files are removed.
         if self._ep_idx is not None:
             try:
                 for key in self._cam_keys:
@@ -1126,7 +1111,7 @@ class EncoderProcClient:
                         video_path.unlink()
             except Exception:
                 pass
-            # 同步清 JPEG 目录
+            # Remove episode statistics images.
             try:
                 for vk in self._dataset.meta.video_keys:
                     img_dir = self._dataset._get_image_file_path(
@@ -1172,7 +1157,7 @@ class EncoderProcClient:
         except Exception:
             pass
         self._proc = None
-        _log.info("[ENC-PROC] 已关闭")
+        _log.info("[编码] 编码服务已关闭")
 
     @property
     def is_dead(self) -> bool:

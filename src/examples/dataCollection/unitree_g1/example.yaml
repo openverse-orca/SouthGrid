@@ -7,9 +7,7 @@ level_name: "example"
 type: "pick_and_place"
 
 # 数据采集配置
-# agent_joint_prefix: 录制/回放时仅记录与恢复前缀匹配的关节。
-#   机器人关节名固定（如 g1_omnipicker_free_joint），而场景 actor 关节名带随机 GUID，
-#   仅记录机器人关节可避免回放时因 actor 关节名变化导致恢复失败。
+# agent_joint_prefix: 录制和回放时，仅处理名称匹配该前缀的机器人关节。
 data_collection:
   agent_joint_prefix: "g1_pick_"
 

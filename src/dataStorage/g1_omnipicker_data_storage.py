@@ -155,7 +155,7 @@ class G1OmniPickerDataStorage(AbstractDataStorage):
 
     def _save_data(self, **kwargs):
         os.makedirs(self.get_current_unit_path(), exist_ok=True)
-        orca_logger.info(f"Saving data to {self.get_current_unit_path()}")
+        orca_logger.info("Saving data unit")
 
         hdf5_path = self.get_hdf5_absolute_path()
         os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)
