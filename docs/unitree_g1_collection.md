@@ -1,6 +1,6 @@
 # 宇树 G1 · 数据采集与回放
 
-本文说明宇树 G1 在 SouthGrid 场景中的相机配置、Pico 遥操作、路点录制、脚本化数据采集、LeRobot 数据回放与数据格式。
+本文说明宇树 G1 在 SouthGrid 场景中的相机配置、Pico 遥操作、工具/按钮脚本化数据采集、LeRobot 数据回放与数据格式。
 
 ---
 
@@ -15,20 +15,20 @@
 3. 请确认宇树 G1 与场景物体已正确加载。
 4. 请确认 `src/examples/dataCollection/unitree_g1/example.yaml` 中的 `level_name` 与 OrcaLab 场景名称一致，默认值为 `"example"`。
 
-两个布局当前保存的机器人名称不同：
+两个布局当前保存的机器人名称相同：
 
 | 布局文件 | 布局中的机器人名称 | `--agent_name` |
 |----------|--------------------|----------------|
 | `g1_pick_tools.json` | `g1_pick` | `g1_pick` |
-| `g1_pick_buttons.json` | `humanoid_robot_1` | `humanoid_robot_1` |
+| `g1_pick_buttons.json` | `g1_pick` | `g1_pick` |
 
-本文的示例命令按 `g1_pick_tools.json` 编写，因此均显式传入：
+本文的示例命令均显式传入：
 
 ```text
 --agent_name g1_pick
 ```
 
-如果加载 `g1_pick_buttons.json`，必须把命令中的 `--agent_name` 改为布局里的实际机器人名称。脚本中的默认值不一定与当前布局一致，请勿省略该参数。
+当前三个入口脚本的默认 `--agent_name` 也都是 `g1_pick`。示例仍显式传入该参数，便于在使用自定义布局时检查机器人名称是否一致。
 
 ### 配置相机
 
@@ -39,9 +39,10 @@
 | 右腕 | `camera_right` | `camera_wrist_r_color` | `cam_wrist_r` | 7080 |
 | 头部 | `head_cam` | `camera_head_color` | `cam_head` | 7090 |
 
-以上端口同时由布局与代码确认：
+以上端口同时由两个布局与代码确认：
 
-- `g1_pick_tools.json` 为右腕相机明确设置 `ColorPort: 7080`，为头部相机明确设置 `ColorPort: 7090`，并启用 `ColorCamera`、`UseNvEnc` 和 `Enable`。
+- `g1_pick_tools.json` 和 `g1_pick_buttons.json` 均为右腕相机明确设置 `ColorPort: 7080`，为头部相机明确设置 `ColorPort: 7090`，并启用 `ColorCamera`、`UseNvEnc` 和 `Enable`。
+- `g1_pick_buttons.json` 还为两路相机显式设置了 `IsRecording: true`。
 - `src/dataStorage/lerobot_camera.py` 中的 `DEFAULT_CAMERA_MAP` 使用相同的端口：右腕 `7080`、头部 `7090`。
 
 加载布局后，请在 OrcaLab 中检查两路相机：
@@ -51,8 +52,6 @@
 3. 相机组件处于启用状态。
 4. 右腕和头部 `Color Port` 分别为 `7080` 和 `7090`。
 5. 启动仿真后没有其它程序占用这两个端口。
-
-`g1_pick_buttons.json` 当前没有保存相机端口 override。使用该布局时，需要在 OrcaLab 中手动确认并设置上述端口。
 
 共享相机代码还保留左腕 `camera_wrist_l_color:7070`，但当前 Unitree G1 遥操作和脚本化采集入口的 `--cameras` 只支持 `head` 与 `wrist_r`。本文示例不启用左腕相机。
 
@@ -125,7 +124,7 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
 | 参数 | 含义 | 脚本默认值 | 示例值或使用建议 |
 |------|------|------------|------------------|
 | `--task_config` | 场景任务配置文件 | `example.yaml` | 一般无需修改 |
-| `--agent_name` | OrcaLab 布局中的机器人名称 | `g1_pick` | 与 `g1_pick_tools.json` 一致；按钮布局改为 `humanoid_robot_1` |
+| `--agent_name` | OrcaLab 布局中的机器人名称 | `g1_pick` | 与工具、按钮两个布局一致 |
 | `--lerobot_out` | LeRobot 数据集输出目录 | 无；采集模式必须指定 | 每个数据集使用独立目录 |
 | `--repo_id` | 写入数据集元信息的仓库名 | `local/g1_pick_osc` | 可按任务修改 |
 | `--task` | 写入数据集的语言指令 | `g1 pick osc teleoperation` | 应与实际任务和训练指令一致 |
@@ -176,63 +175,11 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
 
 ---
 
-## 录制脚本化路点
-
-`record_waypoints.py` 使用 Pico 遥操作右臂，将当前右臂末端位姿和右夹爪状态记录为 YAML 路点。该脚本只生成路点文件，不生成 LeRobot 数据集。
-
-### 启动命令
-
-请先完成 Pico 的 `8001` 端口转发，再执行：
-
-```bash
-OMP_NUM_THREADS=1 python record_waypoints.py \
-    --task_config example.yaml \
-    --agent_name g1_pick \
-    --dls_lambda 0.2 \
-    --joint_strip on \
-    --strip_col off \
-    --time_step 0.001 \
-    --frame_skip 5 \
-    --output waypoint_tool/my_waypoint_tool1.yaml
-```
-
-相对路径会拼接到 `src/examples/dataCollection/unitree_g1`，因此建议始终显式写出 `waypoint_tool/` 前缀。
-
-`record_waypoints.py` 虽然保留了一些数据集兼容参数，但当前实现不读取相机、不创建 LeRobot writer，也不使用 `--lerobot_out`。因此示例命令只保留真正影响路点录制的参数。
-
-### 路点录制按键
-
-| 功能 | 操作 | 说明 |
-|------|------|------|
-| 移动右臂 | 移动 Pico 右手柄 | 调整待记录的末端位姿 |
-| 控制右夹爪 | A / B 或右扳机 | 路点记录时保存当前开合状态 |
-| 记录路点 | 左右 Grip 同时按下 | 记录右臂位置、四元数和夹爪状态 |
-| 撤销上一点并重置 | 单按右 Grip / Squeeze | 删除最后一个路点并重置场景 |
-| 完成并保存 | 主机终端按 `Ctrl+C` | 若已有路点，自动写出 YAML |
-
-每个路点默认写为 300 个控制步，主要字段如下：
-
-```yaml
-gripper_open: -1.0
-gripper_close: 2
-
-segments:
-  - steps: 300
-    l_hold: true
-    r_target_b: [0.2659, -0.1038, 0.2064]
-    r_quat_b: [-0.4440, -0.2454, 0.0704, 0.8589]
-    gripper_r: open
-```
-
-其中 `r_target_b` 是机器人基座坐标系中的右臂末端位置，`r_quat_b` 是 `xyzw` 顺序的四元数，`gripper_r` 为 `open` 或 `close`。
-
----
-
 ## 脚本化数据采集
 
 `g1_pick_osc_collection_scripted_lerobot.py` 读取一个或多个路点 YAML，将各段插值为连续轨迹，自动控制右臂和右夹爪，并把每个 episode 写为 LeRobot v2.1 数据集。
 
-### 启动命令
+### 工具任务示例
 
 以下示例在同一个 episode 内按顺序执行 `my_waypoint_tool3.yaml` 和 `my_waypoint_tool4.yaml`：
 
@@ -241,9 +188,9 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot.py \
     --task_config example.yaml \
     --agent_name g1_pick \
     --waypoint_files waypoint_tool/my_waypoint_tool3.yaml,waypoint_tool/my_waypoint_tool4.yaml \
-    --task "按红色按钮" \
-    --lerobot_out $HOME/southgrid_datasets/g1_osc_scripted \
-    --repo_id local/g1_pick_osc_scripted \
+    --task "整理工具" \
+    --lerobot_out $HOME/southgrid_datasets/g1_osc_tools \
+    --repo_id local/g1_pick_osc_tools \
     --num_episodes 1 \
     --fps 20 \
     --clock sim \
@@ -262,13 +209,45 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot.py \
     --track_clamp 0.08
 ```
 
-`--waypoint_files` 接受逗号分隔的多个文件。相对路径会以当前脚本目录为基准解析，因此必须保留 `waypoint_tool/` 前缀。
+`--waypoint_files` 接受逗号分隔的多个文件。相对路径会以当前脚本目录为基准解析，因此工具路点必须保留 `waypoint_tool/` 前缀。
 
-`--task` 会写入数据集元信息，必须与路点实际完成的任务一致。采集工具整理数据时，应替换为相应语言指令，例如 `整理工具`。
+`--task` 会写入数据集元信息，必须与路点实际完成的任务一致。
+
+### 按钮任务示例
+
+请先在 OrcaLab 中加载 `g1_pick_buttons.json` 并启动仿真，再执行：
+
+```bash
+OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot.py \
+    --task_config example.yaml \
+    --agent_name g1_pick \
+    --waypoint_files my_waypoint_button/my_waypoint_button1.yaml,my_waypoint_button/my_waypoint_button2.yaml,my_waypoint_button/my_waypoint_button3.yaml,my_waypoint_button/my_waypoint_button4.yaml \
+    --task "按红色按钮" \
+    --lerobot_out $HOME/southgrid_datasets/g1_osc_buttons \
+    --repo_id local/g1_pick_osc_buttons \
+    --num_episodes 1 \
+    --fps 20 \
+    --clock sim \
+    --cameras head,wrist_r \
+    --camera_source websocket \
+    --joint_strip on \
+    --strip_col off \
+    --time_step 0.001 \
+    --frame_skip 5 \
+    --dls_lambda 0.23 \
+    --dls_sigma_th 0.12 \
+    --null_kp 10 \
+    --kp 0 \
+    --action_repeat 1 \
+    --track_ki 0 \
+    --track_clamp 0.08
+```
+
+四个 `my_waypoint_button` 文件会按命令中的顺序拼接，在同一个 episode 内依次执行，共包含 12 个路点段。相对路径同样以脚本目录为基准，因此必须保留 `my_waypoint_button/` 前缀。
 
 | 参数 | 含义 | 默认值 | 使用建议 |
 |------|------|--------|----------|
-| `--waypoint_files` | 逗号分隔的路点 YAML | `waypoint_tool/my_waypoint_tool1.yaml` | 多文件在同一集内依次执行 |
+| `--waypoint_files` | 逗号分隔的路点 YAML | `waypoint_tool/my_waypoint_tool1.yaml` | 工具或按钮路点按给定顺序在同一集内依次执行 |
 | `--lerobot_out` | LeRobot 数据集输出目录 | 无；非 dry-run 必须指定 | 每个数据集使用独立目录 |
 | `--repo_id` | 数据集仓库名 | `local/g1_pick_osc_scripted` | 可按任务修改 |
 | `--task` | 数据集语言指令 | `按红色按钮` | 必须与实际轨迹一致 |
@@ -358,7 +337,7 @@ data_collection:
   agent_joint_prefix: "g1_pick_"
 ```
 
-运行时，四个入口脚本都会根据 `--agent_name` 覆盖 `agent_joint_prefix`。因此最重要的是保证命令中的 `--agent_name` 与当前布局中的机器人名称完全一致。
+运行时，三个入口脚本都会根据 `--agent_name` 覆盖 `agent_joint_prefix`。因此最重要的是保证命令中的 `--agent_name` 与当前布局中的机器人名称完全一致。
 
 ---
 
@@ -368,12 +347,12 @@ data_collection:
 |------|------|
 | `src/examples/dataCollection/unitree_g1/example.yaml` | 场景和数据采集配置 |
 | `src/examples/dataCollection/unitree_g1/g1_pick_tools.json` | 工具与电柜场景；显式配置头部 7090、右腕 7080 |
-| `src/examples/dataCollection/unitree_g1/g1_pick_buttons.json` | 按钮场景；机器人名和相机 override 与工具布局不同 |
+| `src/examples/dataCollection/unitree_g1/g1_pick_buttons.json` | 按钮场景；显式配置头部 7090、右腕 7080 |
 | `src/examples/dataCollection/unitree_g1/g1_pick_osc_collection_tele_lerobot.py` | Pico 遥操作和 LeRobot 数据采集 |
-| `src/examples/dataCollection/unitree_g1/record_waypoints.py` | Pico 遥操作录制路点 YAML |
 | `src/examples/dataCollection/unitree_g1/g1_pick_osc_collection_scripted_lerobot.py` | 路点插值与脚本化数据采集 |
 | `src/examples/dataCollection/unitree_g1/g1_pick_osc_replay_lerobot.py` | LeRobot parquet 数据回放 |
-| `src/examples/dataCollection/unitree_g1/waypoint_tool/*.yaml` | 已录制的工具轨迹路点 |
+| `src/examples/dataCollection/unitree_g1/waypoint_tool/*.yaml` | 工具任务脚本化路点 |
+| `src/examples/dataCollection/unitree_g1/my_waypoint_button/*.yaml` | 按钮任务脚本化路点 |
 | `src/dataStorage/lerobot_camera.py` | 相机名称、端口和 WebSocket 连接实现 |
 | `src/dataStorage/g1_pick_osc_data_storage.py` | Unitree G1 的 18 维 state/action 定义 |
 
@@ -435,25 +414,21 @@ data_collection:
 - Pico 已被 `adb devices` 识别，并已执行 `adb reverse tcp:8001 tcp:8001`。
 - GPU、NVIDIA 驱动和 PyAV/FFmpeg 支持 `av1_nvenc`。
 - 数据集输出目录可写且磁盘空间充足。
-- 路点相对路径带有 `waypoint_tool/` 前缀。
+- 工具路点带有 `waypoint_tool/` 前缀，按钮路点带有 `my_waypoint_button/` 前缀。
 
 ---
 
 ## 故障排查
 
-**现象**：脚本找不到机器人或初始化失败。 **处理**：检查当前布局的机器人名称。`g1_pick_tools.json` 使用 `g1_pick`，`g1_pick_buttons.json` 使用 `humanoid_robot_1`；将 `--agent_name` 改为实际名称。
+**现象**：脚本找不到机器人或初始化失败。 **处理**：当前工具和按钮布局的机器人名称都是 `g1_pick`；使用自定义布局时，请检查 `AgentList` 并将 `--agent_name` 改为实际名称。
 
-**现象**：相机端口 `7080` 或 `7090` 超时。 **处理**：确认仿真已运行，并在 OrcaLab 中检查右腕 `7080`、头部 `7090`、`Color Camera`、`UseNvEnc` 和相机启用状态。`g1_pick_buttons.json` 没有保存这些端口 override，使用时需手动核对。
+**现象**：相机端口 `7080` 或 `7090` 超时。 **处理**：当前两个布局都显式配置了右腕 `7080`、头部 `7090`；请确认仿真已运行，并检查 `Color Camera`、`UseNvEnc` 和相机启用状态。
 
 **现象**：Pico 显示已连接，但机器人不动。 **处理**：连接成功后还要第一次按下左 Grip 才会开始当前集并解除采集前冻结。
 
 **现象**：Pico 没有输入。 **处理**：执行 `adb devices`，确认设备已授权，再重新执行 `adb reverse tcp:8001 tcp:8001`，并确认 Pico 端应用已启动。
 
-**现象**：`record_waypoints.py` 运行后没有生成数据集。 **处理**：这是预期行为。该脚本只在退出时写出路点 YAML；正式数据集由脚本化或遥操作采集入口生成。
-
-**现象**：退出路点录制后没有 YAML 文件。 **处理**：至少记录一个路点后再按 `Ctrl+C`。没有路点时脚本不会创建输出文件。
-
-**现象**：脚本化采集找不到路点文件。 **处理**：相对路径以 `src/examples/dataCollection/unitree_g1` 为基准，使用 `waypoint_tool/文件名.yaml`，多个文件之间只用逗号分隔。
+**现象**：脚本化采集找不到路点文件。 **处理**：相对路径以 `src/examples/dataCollection/unitree_g1` 为基准，工具任务使用 `waypoint_tool/文件名.yaml`，按钮任务使用 `my_waypoint_button/文件名.yaml`，多个文件之间只用逗号分隔。
 
 **现象**：使用 `--resume` 时拒绝续写。 **处理**：检查旧数据集的 state/action feature 和相机键是否与当前命令一致。不要向不同 schema 或不同相机组合的数据集续写。
 
