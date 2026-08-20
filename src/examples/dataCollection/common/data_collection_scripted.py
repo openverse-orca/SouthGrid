@@ -278,16 +278,13 @@ def build_segmented_trajectory(
 
 
 def dump_manipulation_debug(env, agent_conf):
-    """
-    打印基座系下：右臂末端、左臂末端、以及名称含 bottle 的 body 位置。
-    基座须用 env.body(base_link 逻辑名) 解析为带 agent 前缀的真实 body（如 openloong_base_link）。
-    """
+    """输出双臂末端和任务物体在机器人基座坐标系中的位置。"""
     base_name = env.body(agent_conf.base_body)
     l_site = env.site(agent_conf.l_arm["ee_site_name"])
     r_site = env.site(agent_conf.r_arm["ee_site_name"])
     ee_b = env.query_site_pos_and_quat_B([l_site, r_site], [base_name])
     orca_logger.info(
-        f"=== 相对基座 body「{base_name}」的位置 (米)，与 pose 里 r_target_b / r_delta_b 一致 ==="
+        f"=== 基座坐标系「{base_name}」位姿测量（米） ==="
     )
     orca_logger.info(f"左臂末端 {agent_conf.l_arm['ee_site_name']}: {ee_b[l_site]['xpos']}")
     orca_logger.info(f"右臂末端 {agent_conf.r_arm['ee_site_name']}: {ee_b[r_site]['xpos']}")
@@ -300,9 +297,9 @@ def dump_manipulation_debug(env, agent_conf):
             pos_b = env.query_position_body_B(name, base_name)
             orca_logger.info(f"物体 body \"{name}\" 中心相对基座: {pos_b}")
         except Exception as ex:
-            orca_logger.warning(f"body \"{name}\" query_position_body_B 失败: {ex}")
+            orca_logger.warning(f"无法读取物体 \"{name}\" 的基座系位置")
     if not found:
-        orca_logger.warning("模型中未找到名称含 bottle 的 body，请用 MuJoCo 查看物体 body 名后手写 r_target_b。")
+        orca_logger.warning("未找到名称含 bottle 的任务物体")
     found_basket = False
     for name in env.model.get_body_names():
         if not name or "basket" not in name.lower():
@@ -310,14 +307,12 @@ def dump_manipulation_debug(env, agent_conf):
         found_basket = True
         try:
             pos_b = env.query_position_body_B(name, base_name)
-            orca_logger.info(f"篮子 body \"{name}\" 中心相对基座: {pos_b}（第 3 段可用 r_target_b 对准篮心上方）")
+            orca_logger.info(f"篮子 body \"{name}\" 中心相对基座: {pos_b}")
         except Exception as ex:
-            orca_logger.warning(f"body \"{name}\" query_position_body_B 失败: {ex}")
+            orca_logger.warning(f"无法读取物体 \"{name}\" 的基座系位置")
     if not found_basket:
-        orca_logger.warning("未找到名称含 basket 的 body，放置段请用 r_delta_b 试方向或查模型 body 名。")
-    orca_logger.info(
-        "调参建议：第一段 r_target_b=瓶子 pos_B；放置段若 r_delta_b 方向反了（往右跑），对 X/Y 逐项改号再试。"
-    )
+        orca_logger.warning("未找到名称含 basket 的任务物体")
+    orca_logger.info("位姿测量完成")
     orca_logger.info("=== 结束 ===")
 
 
@@ -381,8 +376,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="脚本 OSC 控制；位姿可用 --delta_b、--l_target_b/--r_target_b 或 --pose_file 传入（见文件头说明）。"
     )
-    parser.add_argument("--level", type=str, required=True, help="场景名（与 dataset 目录一致，仅用于日志/路径占位）")
-    parser.add_argument("--task_config", type=str, required=True, help="场景 yaml，与 tele 相同")
+    parser.add_argument("--level", type=str, required=True, help="场景名和数据集目录名")
+    parser.add_argument("--task_config", type=str, required=True, help="场景任务 YAML 配置")
     parser.add_argument("--steps", type=int, default=None, help="轨迹长度；默认 400 或与 pose 文件中 steps")
     parser.add_argument(
         "--delta_b",
@@ -435,13 +430,12 @@ def main():
     parser.add_argument(
         "--dump_pose",
         action="store_true",
-        help="场景就绪后打印左/右臂末端与 bottle 物体在 base_link 下的位置，然后退出（用于填写 r_target_b）",
+        help="场景就绪后输出双臂末端与任务物体的基座系位置，然后退出",
     )
     parser.add_argument(
         "--record_hdf5",
         action="store_true",
-        help="将本回合数据保存为 HDF5（与 data_collection_tele 相同布局），路径 dataset/openloong/<level>/；"
-        "可供 data_collection_aug.py 从该目录回放。任务失败则丢弃本回合缓冲。",
+        help="将成功回合保存为 HDF5，目录为 dataset/openloong/<level>/；任务未完成时丢弃本回合缓冲",
     )
     args = parser.parse_args()
     if (args.l_target_b is None) ^ (args.r_target_b is None):
@@ -484,7 +478,7 @@ def main():
     scene_manager.show_ui_message(1, ui_msg, "0xffff00", showtime=5)
     scene_manager.get_scene_data(script_name, "beginscene")
 
-    # 与 tele/aug 相同观测结构；Gymnasium 不允许空 Dict observation_space
+    # Declare the observation schema used by this scripted episode.
     obs_storage = OpenLoongDataStorage(
         dataset_path=os.path.join(base_dir, "dataset", "openloong", args.level),
         hdf5_path="record/proprio_stats.hdf5",
@@ -531,12 +525,12 @@ def main():
     task_status = TaskStatusController(env, agent_conf.base_body, is_controller=False)
     data_collection_manager.set_task_status_controller(task_status)
     data_collection_manager.set_task(EmptyTask(env))
-    # 仅 HDF5 时不必开视频；需要与 tele 一样录视频时可改为 True 并 set_video_path
+    # This entry records HDF5 state only.
     data_collection_manager.save_video = False
 
     if not args.dump_pose:
         orca_logger.info(
-            "Running scripted episode (OSC). 修改 --delta_b 与 build_placeholder_trajectory 以对准目标物体。"
+            "Running scripted OSC episode with the configured trajectory."
         )
     data_collection_manager.env.disable_actuator(data_collection_manager.disable_actuator_group)
     try:
@@ -604,7 +598,7 @@ def main():
                     **sim_metadata,
                 )
                 orca_logger.info(
-                    f"HDF5 已保存（可与 data_collection_aug 使用相同 --level 与 dataset 路径回放）"
+                    "HDF5 回合已保存"
                 )
             else:
                 data_collection_manager.data_storage.clear_data()
@@ -619,7 +613,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         orca_logger.info("KeyboardInterrupt, End")
     except Exception as e:
-        orca_logger.error(f"Unexpected error: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"Scripted episode failed: {e}")
     finally:
         orca_logger.info("Exiting program")
         os._exit(0)

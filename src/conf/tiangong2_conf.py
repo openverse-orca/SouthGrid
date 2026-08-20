@@ -102,13 +102,6 @@ r_arm = {
     "ee_site_name": "ee_center_site_r",
 }
 
-# gripper_2f85_l = {
-#     "joint_names": ["l_left_driver_joint"],
-#     "actuator_names": ["l_fingers_actuator"],
-#     "actuator_ranges": [(0, 255)],
-#     "init_ctrl": [0],
-# }
-
 gripper_l = {
     "joint_names": [
         "left_thumb_1_joint",
@@ -175,13 +168,6 @@ gripper_r = {
     "actuator_ranges": [(0, 1.24616), (0, 0.48), (0, 0.3578), (0, 0.2775), (0, 0.5), (0, 0.5), (0, 0.5), (0, 0.5), (0, 0.5), (0, 0.5), (0, 0.5), (0, 0.5),(0, 0.5),],
     "init_ctrl": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 }
-# gripper_2f85_r = {
-#     "joint_names": ["r_right_driver_joint"],
-#     "actuator_names": ["r_fingers_actuator"],
-#     "actuator_ranges": [(0, 255)],
-#     "init_ctrl": [0],
-# }
-
 motors_group = 0
 positions_group = 1
 

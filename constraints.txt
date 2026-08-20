@@ -1,9 +1,5 @@
-# Transitive versions observed in the validated orcalab_lerobot environment.
-#
-# requirements.in only lists direct dependencies. Without these constraints the
-# resolver is free to pick newer transitive releases, which would ship a stack
-# that was never exercised end to end. This file is a lock input only; delivery
-# installs read requirements.txt.
+# Validated transitive versions for the SouthGrid runtime.
+# This file is an input to lock generation; installations use requirements.txt.
 
 absl-py==2.4.0
 aiohappyeyeballs==2.6.1
@@ -50,10 +46,7 @@ xxhash==3.7.0
 yarl==1.23.0
 zipp==3.23.1
 
-# Reached only through the OrcaLab entries in requirements.in: the Qt runtime
-# behind pyside6 and the MCP/ASGI stack behind fastmcp. Kept in a separate block
-# because this is by far the largest single source of transitive packages, and
-# dropping OrcaLab would make every line below removable.
+# OrcaLab desktop dependencies: the Qt runtime and the MCP/ASGI stack.
 aiofile==3.12.3
 annotated-types==0.8.0
 anyio==4.14.2

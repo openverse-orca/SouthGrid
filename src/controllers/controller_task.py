@@ -1,10 +1,4 @@
-# -*- coding: utf-8 -*-
-# @Author: Agasea
-# @Date: 2025-11-21 15:16:18
-# @Last Modified by:   Agasea
-# @Last Modified time: 2025-11-21 15:16:18
-# @Description: Description
-# @CopyRight: 松应科技
+"""Task lifecycle status controller."""
 
 import time
 from typing import override
@@ -35,7 +29,7 @@ class TaskStatusController(AbstractController):
         return self.current_status
 
     def update_task_status(self, next_status: bool):
-        # pico控制器需要控制一下频率，否则任务状态会很快变化
+        # Apply a debounce interval to controller-driven status transitions.
         if self.is_controller:
             current_time = time.time()
             if current_time - self.current_time < 0.2:

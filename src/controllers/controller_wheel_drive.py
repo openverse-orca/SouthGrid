@@ -101,10 +101,8 @@ class ControllerDifferentialDrive(AbstractController):
             elif self.steering > 0:
                 left_torque = self.throttle * self.torque
                 right_torque = -self.throttle * self.torque * 0.9
-                # right_torque = 0
             else:
                 left_torque = -self.throttle * self.torque * 0.9
-                # left_torque = 0
                 right_torque = self.throttle * self.torque
 
             ctrl = {}
@@ -274,8 +272,6 @@ class ControllerSteeringDrive(AbstractController):
        
         elif self.controller_type == self.ControllerType.DATA:
             ctrl = self.ctrl
-        # import icecream
-        # icecream.ic(ctrl)
         return ctrl
 
     @override

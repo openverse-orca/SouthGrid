@@ -192,7 +192,7 @@ class DataDevice(AbstractDevice):
         hdf5_path = os.path.join(self.current_unit_path, self.hdf5_path)
         with h5py.File(hdf5_path, "r") as f:
             self.data = {}
-            # 排除非时序的元数据字段（标量字符串 dataset，不支持切片）
+            # Metadata fields are loaded separately from time-series datasets.
             _meta_keys = [
                 "task_info",
                 "scene_info",
@@ -210,13 +210,13 @@ class DataDevice(AbstractDevice):
 
             self.task_info = json.loads(f["task_info"][()])
             self.scene_info = json.loads(f["scene_info"][()])
-            # 读取机器人初始关节位置（可选，旧数据无此字段）
+            # Optional initial robot state.
             self.initial_joint_qpos = (
                 json.loads(f["initial_joint_qpos"][()])
                 if "initial_joint_qpos" in f
                 else None
             )
-            # 读取仿真器元数据（可选，旧数据无此字段）
+            # Optional simulator metadata.
             self.opt_config = (
                 json.loads(f["opt_config"][()])
                 if "opt_config" in f
@@ -228,7 +228,7 @@ class DataDevice(AbstractDevice):
         if self.interpolator is not None:
             self._apply_interpolation()
 
-        # 每次加载新数据单元后重置回放游标，避免使用 pop(0) 造成 O(n) 开销
+        # Reset the replay cursor for the newly loaded data unit.
         self.dataset_cursor = {dataset_path: 0 for dataset_path in self.dataset_event.keys()}
         self.update_task_status = True
 

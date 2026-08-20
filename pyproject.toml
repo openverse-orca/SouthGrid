@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "orca-manipulation"
 version = "0.1.0"
-description = "OrcaManipulation - Manipulation tasks for OrcaGym"
+description = "SouthGrid manipulation examples for OrcaGym"
 requires-python = ">=3.12,<3.13"
 dependencies = ["orca-gym==26.7.3"]
 

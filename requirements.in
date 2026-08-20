@@ -7,12 +7,8 @@
 #     --no-emit-package numpy --no-emit-package scipy \
 #     --no-emit-package argparse --output-file requirements.txt
 #
-# NumPy and SciPy are listed so the resolver sees the validated versions, but they
-# are excluded from the lock because Conda owns those builds.
-#
-# argparse is excluded because params-proto declares it: on Python 3.12 the PyPI
-# argparse 1.4.0 backport shadows the standard library module and removes
-# argparse.BooleanOptionalAction, which the teleoperation entry point uses.
+# NumPy and SciPy use the validated Conda builds and are therefore excluded from
+# the pip lock. Python 3.12 uses the standard-library argparse module.
 
 --extra-index-url https://download.pytorch.org/whl/cpu
 
@@ -33,18 +29,10 @@ gymnasium==1.2.1
 mujoco==3.7.0
 scipy-stubs==1.16.2
 
-# OrcaLab 26.7.3 (the desktop application) runtime dependencies. OrcaLab is
-# installed with --no-deps for the same reason as OrcaGym; the entries below are
-# the subset of its dependency list that nothing else in this file already pulls.
-# Its remaining dependencies (aiofiles, aiohttp, filelock, matplotlib, pillow,
-# psutil, requests) are declared elsewhere at the versions OrcaLab requires.
+# OrcaLab 26.7.3 desktop runtime dependencies not already supplied above.
+# Shared packages are resolved once at the versions validated for this runtime.
 #
-# OrcaLab pins pyparsing==3.2.5, which this lock deliberately does not honour:
-# OrcaLab never imports pyparsing, and its only consumer here is matplotlib,
-# which is validated against the resolved 3.3.2.
-#
-# fastmcp is unpinned in the OrcaLab metadata, so it is pinned explicitly here;
-# leaving it open would let every rebuild pull a different MCP stack.
+# fastmcp is pinned explicitly to keep environment installation reproducible.
 fastmcp==3.4.7
 pyside6==6.9.2
 aiohttp==3.13.1
@@ -67,10 +55,7 @@ torchvision==0.22.1+cpu
 
 # Project runtime.
 h5py==3.16.0
-# matplotlib is a runtime dependency of orca_gym.sensor.rgbd_camera (module-level,
-# unconditional import). orca-gym is installed with --no-deps, so its "sensors"
-# extra is never pulled in automatically; this entry ensures matplotlib and its
-# transitive deps appear in the hashed lock.
+# Required by the OrcaGym RGB-D camera module and included in the resolved lock.
 matplotlib==3.10.7
 numba==0.65.1
 opencv-python==4.13.0.92
@@ -84,9 +69,8 @@ dm-tree==0.1.10
 msgpack==1.1.2
 websockets==16.0
 
-# Retained from the known-good OrcaLab 7.1 delivery environment. These packages
-# are additive compatibility dependencies; keeping them in the lock prevents a
-# delivery cleanup from silently shrinking the validated runtime again.
+# Compatibility dependencies validated with the OrcaLab 7.3 runtime.
+# They remain explicit so repeated installations use the same dependency set.
 aiohttp-cors==0.8.1
 killport==1.2.0
 vuer==0.0.60

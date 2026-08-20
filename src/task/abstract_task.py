@@ -28,7 +28,7 @@ class AbstractTask(metaclass=abc.ABCMeta):
             scene_manager.update_actor_qpos()
             retry_count += 1
         if retry_count >= 10:
-            raise ValueError("Get Task Failed, please check your task config file, because task is always success")
+            raise ValueError("Unable to initialize the task after 10 attempts; check the task configuration")
         return True
 
     @abc.abstractmethod

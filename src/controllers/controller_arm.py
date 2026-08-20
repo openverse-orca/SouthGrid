@@ -49,8 +49,7 @@ class ControllerArm(AbstractController):
         self.action[0:3] = self.initial_ee_pos
         self.action[3:6] = R.from_quat(self.initial_ee_quat[[1, 2, 3, 0]]).as_rotvec()
 
-        # update() must be called before reset_goal() to ensure joint_pos / ee_pos
-        # reflect the current physics state (after mj_forward), not stale values.
+        # Synchronize controller state before resetting its target.
         self.controller.update()
         self.controller.reset_goal()
 

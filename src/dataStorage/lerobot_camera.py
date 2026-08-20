@@ -1,20 +1,9 @@
-"""LeRobot 采集用相机帧工具。
+"""Camera helpers for LeRobot data collection.
 
-OrcaStudio 通过 WebSocket 在 7080/7090 端口推流（需在 OrcaStudio 中正确配置后，
-调用 env.begin_save_video() 触发）。CameraWrapper 订阅流并在内存中保持最新帧，
-collection_data() 在每个采集步用 capture_frame_with_idx() 取帧后立即送入 AsyncImageWriter
-队列落盘为 PNG；episode 结束后 LeRobot 用 ffmpeg 编码 PNG → MP4。
-
-    典型调用顺序：
-        1. env.begin_save_video(trigger_path)   → 触发 OrcaStudio 开始推流
-        2. cameras = bring_up_cameras(camera_map)   → 探测端口就绪后连 WebSocket
-        3. 每步: images, cam_idxs = capture_frame_with_idx(cameras, camera_map, hw)
-               dataset.add_frame({...images, state, action}, task)  → PNG 入队
-        4. episode 成功: dataset.save_episode(...)  → PNG → MP4
-        5. env.stop_save_video()                → OrcaStudio 停止推流
-
-相机映射 camera_map 结构（可按场景覆盖）：
-    {env_camera_sensor_name: (lerobot_key, port), ...}
+OrcaStudio streams configured cameras over WebSocket. This module provides camera
+maps, live-frame capture, resolution detection, and timestamp-aligned MP4 frame
+iteration. A camera map has the form
+``{environment_camera_name: (dataset_key, port), ...}``.
 """
 import logging
 import os
@@ -31,7 +20,7 @@ DEFAULT_CAMERA_MAP = {
     "camera_head_color": ("cam_head", 7090),
     "camera_wrist_r_color": ("cam_wrist_r", 7080),
 }
-# 左腕（旧三路采集 / 旧策略需要时再启用）。
+# Optional left-wrist camera.
 WRIST_L_CAMERA = {
     "camera_wrist_l_color": ("cam_wrist_l", 7070),
 }
@@ -41,8 +30,7 @@ DEFAULT_HW = (480, 640)
 def omnipicker_camera_map(*, enable_wrist_l: bool = False) -> dict:
     """返回 OmniPicker 相机映射。
 
-    默认两路（头 7090 + 右腕 7080）。``enable_wrist_l=True`` 时按旧顺序
-    插入左腕 7070：head → wrist_l → wrist_r。
+    默认启用头部 7090 和右腕 7080；``enable_wrist_l=True`` 时增加左腕 7070。
     """
     if not enable_wrist_l:
         return dict(DEFAULT_CAMERA_MAP)
@@ -69,10 +57,7 @@ def wait_ports_open(
 ) -> dict:
     """等待 OrcaStudio 打开各相机推流端口（TCP 可连），返回 {env_name: port}。
 
-    begin_save_video 触发推流后，OrcaStudio 需要若干秒才真正 listen 这些端口。
-    CameraWrapper 是一次性 websockets.connect、无重连：若在端口就绪前抢连会
-    ConnectionRefused 并使后台线程直接退出（首帧永远等不到）。这里先用 TCP
-    探测（带重试）确认端口就绪，再启动 CameraWrapper，从根本上规避竞态。
+    启动 CameraWrapper 前会轮询各 TCP 端口，直到就绪或达到超时时间。
 
     Args:
         camera_map: {env_name: (lerobot_key, port)}。
@@ -204,7 +189,7 @@ def capture_frame_with_idx(
 
 
 def probe_camera_hw(cameras: dict, camera_map: dict, default_hw: tuple = DEFAULT_HW) -> tuple:
-    """从 WebSocket 首帧探测真实分辨率 (H, W)，失败回退 default_hw。"""
+    """返回 WebSocket 首帧分辨率；首帧不可用时返回 ``default_hw``。"""
     first_env_name = next(iter(camera_map.keys()), None)
     if first_env_name is None or first_env_name not in cameras:
         return default_hw
@@ -214,12 +199,12 @@ def probe_camera_hw(cameras: dict, camera_map: dict, default_hw: tuple = DEFAULT
         if frame is not None and frame.ndim == 3 and frame.size > 0:
             return (int(frame.shape[0]), int(frame.shape[1]))
     except Exception as e:
-        print(f"[WARN] 相机分辨率探测失败，回退 {default_hw}: {e}")
+        print(f"[相机] 未能读取首帧分辨率，使用配置值 {default_hw}")
     return default_hw
 
 
 def setup_cameras(camera_map: dict) -> dict:
-    """启动 WebSocket 相机流（无端口就绪探测，建议改用 bring_up_cameras）。"""
+    """启动已配置的 WebSocket 相机流。"""
     from orca_gym.sensor.rgbd_camera import CameraWrapper  # type: ignore[import]
     cameras = {}
     for name, (_key, port) in camera_map.items():
@@ -234,7 +219,7 @@ def setup_cameras(camera_map: dict) -> dict:
 
 
 def wait_for_cameras(cameras: dict, timeout: float = 30.0) -> None:
-    """等待 WebSocket 相机首帧就绪（无线程重启，建议改用 bring_up_cameras）。"""
+    """等待 WebSocket 相机首帧就绪。"""
     deadline = time.time() + timeout
     while time.time() < deadline:
         pending = [n for n, c in cameras.items() if not c.is_first_frame_received()]
@@ -291,11 +276,11 @@ def extract_frames_from_mp4(
     for env_name, (key, _port) in camera_map.items():
         mp4_path = os.path.join(video_subdir, f"{env_name}.mp4")
         if not os.path.exists(mp4_path):
-            print(f"[WARN] MP4 未找到，该路将输出黑帧: {mp4_path}", flush=True)
+            print(f"[相机] {env_name} 视频不可用，使用占位图像；本集不可用于视觉评估", flush=True)
             continue
         cap = cv2.VideoCapture(mp4_path)
         if not cap.isOpened():
-            print(f"[WARN] MP4 无法打开，该路将输出黑帧: {mp4_path}", flush=True)
+            print(f"[相机] {env_name} 视频无法读取，使用占位图像；本集不可用于视觉评估", flush=True)
             continue
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -334,11 +319,9 @@ def iter_frames_from_mp4(
     ep_start_wall_s: float,
     target_hw: tuple,
 ):
-    """生成器版本的 MP4 帧提取：逐帧 yield，峰值内存降到单帧级别。
+    """逐帧生成按时间戳对齐的 MP4 图像。
 
-    接口与 extract_frames_from_mp4 完全一致，但改为 yield 而非 return list。
-    每次 yield 一个 {lerobot_key: (H,W,3) uint8 ndarray}，消费方处理完后
-    该帧即可被 GC 回收，整集全帧不再同时驻留内存。
+    每次生成一个 ``{lerobot_key: (H,W,3) uint8 ndarray}`` 映射。
 
     消费示例::
 
@@ -352,11 +335,11 @@ def iter_frames_from_mp4(
     for env_name, (key, _port) in camera_map.items():
         mp4_path = os.path.join(video_subdir, f"{env_name}.mp4")
         if not os.path.exists(mp4_path):
-            print(f"[WARN] MP4 未找到，该路将输出黑帧: {mp4_path}", flush=True)
+            print(f"[相机] {env_name} 视频不可用，使用占位图像；本集不可用于视觉评估", flush=True)
             continue
         cap = cv2.VideoCapture(mp4_path)
         if not cap.isOpened():
-            print(f"[WARN] MP4 无法打开，该路将输出黑帧: {mp4_path}", flush=True)
+            print(f"[相机] {env_name} 视频无法读取，使用占位图像；本集不可用于视觉评估", flush=True)
             continue
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))

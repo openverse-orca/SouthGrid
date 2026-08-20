@@ -90,16 +90,11 @@ def main() -> None:
     if "QT5" not in gui_line:
         raise RuntimeError(f"OpenCV GUI build required for eval preview, got: {gui_line!r}")
 
-    # Verify that the camera-pipeline import chain works end-to-end. This catches
-    # the missing matplotlib dependency: orca_gym.sensor.rgbd_camera has a
-    # module-level unconditional `import matplotlib`, so the import below fails
-    # immediately if matplotlib is absent from the environment.
+    # Verify the complete camera-pipeline import chain.
     import orca_gym.environment  # noqa: F401
     from orca_gym.sensor.rgbd_camera import CameraWrapper  # noqa: F401
 
-    # orca-lab declares an exact orca-gym pin and is installed with --no-deps, so
-    # nothing else catches the two drifting apart. They speak gRPC to each other and
-    # a mismatch surfaces as a connection failure long after setup.
+    # Verify the OrcaLab and OrcaGym version contract.
     _orca_lab_pin = next(
         (
             requirement
@@ -158,7 +153,7 @@ def main() -> None:
     if restored["image"].shape != (2, 2, 3):
         raise RuntimeError("OpenPI msgpack NumPy round-trip failed")
 
-    # Exercise the patched data-only episode path without OrcaLab, cameras or GPU.
+    # Verify data-only episode serialization.
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
     with tempfile.TemporaryDirectory(prefix="orca_lerobot_verify_") as tmp:
@@ -189,7 +184,7 @@ def main() -> None:
     print(f"  Python: {sys.version.split()[0]}")
     print(f"  OpenCV: {gui_line.strip()}")
     print(f"  OrcaLab/OrcaGym: {importlib.metadata.version('orca-lab')} / {_orca_gym_version}")
-    print("  LeRobot/TeleVuer/OpenPI client: installed from repository-owned sources")
+    print("  LeRobot/TeleVuer/OpenPI client: versions verified")
 
 
 if __name__ == "__main__":

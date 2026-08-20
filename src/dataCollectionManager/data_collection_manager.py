@@ -76,8 +76,6 @@ class DataCollectionManager:
         self._mode = self.DataCollectionMode.TELECONTROL
         self.inference_ui_message = "推理中..."
         self._shutdown_requested = False
-        # self._original_sigint = signal.getsignal(signal.SIGINT)
-        # signal.signal(signal.SIGINT, self._sigint_handler)
         
     @property
     def save_video(self) -> bool:
@@ -129,7 +127,7 @@ class DataCollectionManager:
             "default_joint_values": default_joint_values,
             "obs_callback": obs_callback,
         }
-        orca_logger.info(f"Creating env {env_name} with kwargs {kwargs}")
+        orca_logger.info(f"Creating environment: {env_name}")
 
         gym.register(
             id=env_id,
@@ -196,7 +194,7 @@ class DataCollectionManager:
         try:
             while not self._shutdown_requested:
                 self.env.reset()
-                # sleep0.1秒等待模拟器重置完成
+                # Allow the simulator reset to settle before scene setup.
                 time.sleep(0.1)
                 update_scene_ret = self.update_scene()
                 if not update_scene_ret:
@@ -206,7 +204,7 @@ class DataCollectionManager:
                 for aug_idx in range(self.aug_count):
                     if aug_idx > 0:
                         self.env.reset()
-                        # sleep0.1秒等待模拟器重置完成
+                        # Allow the simulator reset to settle before replay setup.
                         time.sleep(0.1)
                         if not self._replay_current_augmentation():
                             break
@@ -266,13 +264,12 @@ class DataCollectionManager:
             orca_logger.error(f"Run error: {e}")
             raise
         finally:
-            # signal.signal(signal.SIGINT, self._original_sigint)
             orca_logger.info("Cleanup start")
             if self.data_storage is not None:
                 orca_logger.info("Clear data")
                 self.data_storage.clear_data()
             self.env.reset()
-            # sleep0.1秒等待模拟器重置完成
+            # Allow the final simulator reset to settle before closing.
             time.sleep(0.1)
             self.env.close()
 
@@ -357,7 +354,6 @@ class DataCollectionManager:
                     replay_msg = shorten(
                         f"回放目录: {current_dir_name}", width=80, placeholder="..."
                     )
-                # self.scene_manager.show_ui_message(1, replay_msg, "0x00bfff", showtime=0)
                 self.scene_manager.show_ui_message(
                     1, "回放中...", "0x00bfff", showtime=0
                 )
@@ -416,8 +412,7 @@ class DataCollectionManager:
     def _capture_initial_joint_qpos(self) -> dict:
         """采集机器人关节的当前 qpos，用于回放时恢复初始状态。
 
-        若配置了 data_collection.agent_joint_prefix，仅记录前缀匹配的关节
-        （如 g1_omnipicker_），避免带随机 GUID 的 actor 关节被记录后回放失败。
+        配置 data_collection.agent_joint_prefix 后，仅记录与该前缀匹配的关节。
         """
         try:
             joint_names = list(self.env.model.get_joint_dict().keys())
@@ -425,12 +420,9 @@ class DataCollectionManager:
             if prefix:
                 joint_names = [n for n in joint_names if n.startswith(prefix)]
             qpos_dict = self.env.query_joint_qpos(joint_names)
-            # 转为可 JSON 序列化的 dict（np.array -> list）
+            # Convert arrays to a JSON-serializable mapping.
             result = {name: list(np.asarray(qpos).flatten()) for name, qpos in qpos_dict.items()}
-            # 打印 free_joint 的值用于调试
-            for name in result:
-                if "free_joint" in name:
-                    orca_logger.info(f"Captured {name}: {result[name]}")
+            orca_logger.info(f"Captured initial state for {len(result)} joints")
             return result
         except Exception as e:
             orca_logger.warning(f"Capture initial joint qpos failed: {e}")
@@ -439,33 +431,16 @@ class DataCollectionManager:
     def _restore_initial_joint_qpos(self, initial_joint_qpos: dict) -> bool:
         """用记录的初始关节位置恢复机器人状态。
 
-        说明：场景中 actor 关节名带随机 GUID，每次启动场景可能不同，
-        因此只恢复当前场景中存在的关节，跳过不存在的（如已删除的 actor）。
-        机器人关节（g1_omnipicker_*）名称固定，一定存在。
+        仅恢复当前模型中存在的关节；其余记录项会被忽略。
         """
         if not initial_joint_qpos:
             orca_logger.warning("initial_joint_qpos is empty, skip restore")
             return False
         try:
-            # 获取当前场景中所有关节名，用于过滤
+            # Filter the recorded state against the active model.
             current_joint_names = set(self.env.model.get_joint_dict().keys())
 
-            # 打印恢复前的 free_joint 值
-            try:
-                for name in initial_joint_qpos:
-                    if "free_joint" in name and name in current_joint_names:
-                        before = self.env.query_joint_qpos([name])
-                        orca_logger.info(
-                            f"Before restore {name}: {list(np.asarray(before[name]).flatten())}"
-                        )
-                        orca_logger.info(
-                            f"Target {name}: {initial_joint_qpos[name]}"
-                        )
-                        break
-            except Exception:
-                pass
-
-            # 只恢复当前场景中存在的关节，跳过带随机 GUID 的已失效 actor 关节
+            # Restore only joints present in the active model.
             filtered_qpos = {
                 name: qpos
                 for name, qpos in initial_joint_qpos.items()
@@ -474,23 +449,11 @@ class DataCollectionManager:
             skipped = set(initial_joint_qpos.keys()) - current_joint_names
             if skipped:
                 orca_logger.info(
-                    f"Skipped {len(skipped)} joints not in current scene (e.g. random-GUID actor joints)"
+                    f"Ignored {len(skipped)} state entries not present in the active model"
                 )
 
             self.env.set_joint_qpos(filtered_qpos)
             self.env.mj_forward()
-
-            # 打印恢复后的 free_joint 值
-            try:
-                for name in filtered_qpos:
-                    if "free_joint" in name:
-                        after = self.env.query_joint_qpos([name])
-                        orca_logger.info(
-                            f"After restore {name}: {list(np.asarray(after[name]).flatten())}"
-                        )
-                        break
-            except Exception:
-                pass
 
             orca_logger.info(
                 f"Restored initial joint qpos: {len(filtered_qpos)}/{len(initial_joint_qpos)} joints"

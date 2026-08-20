@@ -1,13 +1,10 @@
-"""g1_pick_osc 数据存储层（G1 人形臂 OSC + OmniPicker 夹爪）。
+"""Unitree G1 OSC data storage.
 
-state 维度与 G1OmniPickerLeRobotStorage 一致（18 维）：
+The LeRobot state has 18 values:
     [l_pos(3), l_quat_xyzw(4), r_pos(3), r_quat_xyzw(4),
      l_grip_inner_norm(1), l_grip_outer_norm(1),
      r_grip_inner_norm(1), r_grip_outer_norm(1)]
-
-差异 vs G1OmniPickerDataStorage：
-  - 使用 g1_pick_osc_conf（G1 人形臂关节名 / motor 名）
-  - 无底盘执行器（/action/drive/ctrl 填零占位）
+The drive-control field is an empty vector in this schema.
 """
 import json
 import os
@@ -119,7 +116,7 @@ class G1PickOscDataStorage(AbstractDataStorage):
             dtype=np.float32,
         )
 
-        # g1_pick_osc 无底盘执行器，填零占位
+        # The drive-control channel is empty for this storage schema.
         obs["/action/drive/ctrl"] = np.zeros(0, dtype=np.float32)
 
         return obs
@@ -170,7 +167,7 @@ class G1PickOscDataStorage(AbstractDataStorage):
 
     def _save_data(self, **kwargs):
         os.makedirs(self.get_current_unit_path(), exist_ok=True)
-        orca_logger.info(f"Saving data to {self.get_current_unit_path()}")
+        orca_logger.info("Saving data unit")
 
         hdf5_path = self.get_hdf5_absolute_path()
         os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)

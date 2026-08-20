@@ -64,8 +64,7 @@ class SceneManager:
 
     def get_agent_joint_prefix(self) -> str | None:
         '''
-        @description: 读取数据采集时需要记录的机器人关节前缀。
-                      仅记录/恢复前缀匹配的关节，避免带随机 GUID 的 actor 关节导致回放失败。
+        @description: 读取数据采集时需要记录和恢复的关节名称前缀。
         @return:
             前缀字符串（如 "g1_omnipicker_"）；未配置时返回 None，表示不过滤
         '''
@@ -93,7 +92,7 @@ class SceneManager:
         in_scene_actors = []
 
         if restore:
-            orca_log.info(f"restore scene, scene_info: {scene_info}")
+            orca_log.info(f"Restoring {len(scene_info)} scene actors")
             for actor_name, actor_info in scene_info.items():
                 self.set_actor_qpos(actor_info["joint_name"], actor_info["joint_qpos"])
                 in_scene_actors.append(actor_info["joint_name"])
@@ -131,7 +130,7 @@ class SceneManager:
                             bound = random_config.get("one_dof", {}).get("bound")
                             qpos_bound = np.concatenate([bound])
                         qpos = get_random_qpos(qpos_bound, dof)
-                        orca_log.info(f"set actor qpos: {joint_name}, {qpos}")
+                        orca_log.info(f"Initialized scene actor: {joint_name}")
                         self.set_actor_qpos(joint_name, qpos)
                         self.env.mj_forward()
         
@@ -168,12 +167,12 @@ class SceneManager:
         actor_names = self._config.get("actor", {}).get("names", [])
         actor_spawnables = self._config.get("actor", {}).get("spawnable", [])
         joints_dof = self._config.get("actor", {}).get("joints_dof", [])
-        # 初始位置为无穷远
+        # Initialize six-DoF actors outside the active workspace.
         for i in range(len(actor_names)):
             dof = joints_dof[i]
             actor_name = actor_names[i]
             actor_spawnable = actor_spawnables[i]
-            orca_log.info(f"spawn actor: {actor_name}, {actor_spawnable}")
+            orca_log.info(f"Spawning scene actor: {actor_name}")
             if dof == 6:
                 self.add_actor(actor_name, actor_spawnable, [100000, 100000, 1], [0, 0, 0, 1])
             elif dof == 3:
@@ -297,8 +296,7 @@ class SceneManager:
         actor_random_one_dof = actor_random.get("one_dof", None)
 
         if actor_random_qpos:
-            # nums 为 [min_count, max_count]：每次随机生成数量 ∈ [min, max]；二者相等则固定为该数量。
-            # 仅 1 个 actor 时必须允许 [1,1]，否则无法通过校验。
+            # nums=[min_count, max_count], with equal values selecting a fixed count.
             if not (
                 actor_random_nums[0] > 0
                 and actor_random_nums[1] >= actor_random_nums[0]

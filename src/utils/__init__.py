@@ -1,1 +1,1 @@
-"""g1_pick / teleop utilities (additive, not shared with omnipicker)."""
+"""Shared utilities for SouthGrid manipulation examples."""
