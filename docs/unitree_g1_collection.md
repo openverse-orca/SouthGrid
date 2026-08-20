@@ -67,7 +67,7 @@ localhost:50051
 
 ## 运行准备
 
-请先按仓库根目录 [README](../README.md) 完成环境安装，并确认已在 OrcaLab 资产库中订阅 `SouthGrid_Competition_2026` 与 `G1_Pick`。
+请先按仓库根目录 [README](../README.md) 完成环境安装，并确认已在 OrcaLab 资产库中订阅 `SouthGrid_Competition_2026` 与 `g1_pick`。
 
 后续命令均在运行 OrcaLab 的主机上执行：
 
@@ -404,7 +404,7 @@ data_collection:
 ## 启动前检查
 
 - 已安装仓库要求的运行环境，并激活 `orcalab_lerobot`。
-- 已订阅 `SouthGrid_Competition_2026` 与 `G1_Pick` 资产。
+- 已订阅 `SouthGrid_Competition_2026` 与 `g1_pick` 资产。
 - 已加载与任务对应的布局并启动仿真。
 - 命令中的 `--agent_name` 与布局机器人名称完全一致。
 - `example.yaml` 的 `level_name` 与 OrcaLab 场景名称一致。
