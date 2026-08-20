@@ -37,10 +37,9 @@ from dataStorage.lerobot_camera import (
     probe_camera_hw,
 )
 
-# 本机 OrcaStudio 只开了两路：7070 右腕、7080 头部（不再等 7090 / 左腕）。
 BUTTON_CAMERA_MAP = {
-    "camera_head_color": ("cam_head", 7080),
-    "camera_wrist_r_color": ("cam_wrist_r", 7070),
+    "camera_head_color": ("cam_head", 7090),
+    "camera_wrist_r_color": ("cam_wrist_r", 7080),
 }
 from dataStorage.lerobot_data_storage import G1OmniPickerLeRobotStorage, LeRobotDatasetWriter
 from devices.abstract_device import AbstractDevice

@@ -5,8 +5,8 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  # 以下版本与构建已通过完整运行验证。
+  # 以下版本已通过完整运行验证。
   - defaults::python=3.12.13=h4d16e0c_1
   - defaults::pip=26.0.1=pyhc872135_1
-  - conda-forge::numpy=2.4.6=py312h33ff503_0
-  - defaults::scipy=1.15.3=py312h525edd1_0
+  - conda-forge::numpy=2.2.6
+  - defaults::scipy=1.16.2

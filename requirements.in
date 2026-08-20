@@ -21,19 +21,18 @@ setuptools==82.0.1
 wheel==0.47.0
 
 # Conda-owned numerical ABI (must already be present).
-numpy==2.4.6
-scipy==1.15.3
+numpy==2.2.6
+scipy==1.16.2
 
-# OrcaGym 26.7.1 runtime dependencies. OrcaGym itself is installed separately
-# with --no-deps because its published NumPy/SciPy metadata does not describe
-# the validated delivery stack.
+# OrcaGym 26.7.3 runtime dependencies. OrcaGym itself is installed separately
+# with --no-deps so pip does not replace the Conda-owned NumPy/SciPy builds.
 aiofiles==25.1.0
 grpcio==1.66.1
 grpcio-tools==1.66.1
 gymnasium==1.2.1
 mujoco==3.7.0
 
-# OrcaLab 26.7.1 (the desktop application) runtime dependencies. OrcaLab is
+# OrcaLab 26.7.3 (the desktop application) runtime dependencies. OrcaLab is
 # installed with --no-deps for the same reason as OrcaGym; the entries below are
 # the subset of its dependency list that nothing else in this file already pulls.
 # Its remaining dependencies (aiofiles, aiohttp, filelock, matplotlib, pillow,

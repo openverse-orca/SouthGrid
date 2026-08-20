@@ -28,7 +28,7 @@
 
 ## 前置条件
 
-1. 请在运行本项目的主机上启动 OrcaLab 7.1，并在 OrcaLab 的加载布局对话框中选择与任务对应的布局文件（`src/examples/dataCollection/g1_omnipicker/g1_button.json` 或 `src/examples/dataCollection/g1_omnipicker/g1_tool.json`）。
+1. 请在运行本项目的主机上启动 OrcaLab 7.3，并在 OrcaLab 的加载布局对话框中选择与任务对应的布局文件（`src/examples/dataCollection/g1_omnipicker/g1_button.json` 或 `src/examples/dataCollection/g1_omnipicker/g1_tool.json`）。
 2. 请按采集文档配置相机端口并启动仿真（`localhost:50051`）。
 3. 请确认已按仓库根目录 README 的「环境安装」一节执行 `bash scripts/install_runtime.sh`。
 4. 策略服务器需要独立的 **openpi uv 环境**。请先按 [策略服务部署](openpi_deployment.md) 创建独立的 OpenPI 环境，并使用交付任务对应的策略配置和 checkpoint 启动服务。

@@ -26,9 +26,8 @@ PY
 # the standard library module and drop argparse.BooleanOptionalAction.
 python -m pip install --no-deps --require-hashes -r requirements.txt
 
-# --no-deps is intentional: the validated Conda NumPy/SciPy versions differ
-# from stale dependency metadata published by orca-gym 26.7.1.
-python -m pip install --no-deps "orca-gym==26.7.1"
+# --no-deps keeps pip from replacing the validated Conda NumPy/SciPy builds.
+python -m pip install --no-deps "orca-gym==26.7.3"
 
 # OrcaLab is the desktop application; the PyPI package is the whole thing, so
 # there is no separate installer to run. --no-deps applies for the same reason as
@@ -36,7 +35,7 @@ python -m pip install --no-deps "orca-gym==26.7.1"
 # matplotlib is validated against. Every dependency it actually needs is in
 # requirements.txt. orca-lab and orca-gym must stay on the same version: orca-lab
 # declares an exact orca-gym pin, and a mismatch breaks the gRPC handshake.
-python -m pip install --no-deps "orca-lab==26.7.1"
+python -m pip install --no-deps "orca-lab==26.7.3"
 
 # Repository-owned sources are installed last. No developer-machine path or
 # unpinned Git checkout is consulted.

@@ -28,10 +28,10 @@ def main() -> None:
         raise RuntimeError(f"expected Python 3.12.13, got {sys.version.split()[0]}")
 
     expected_versions = {
-        "numpy": "2.4.6",
-        "scipy": "1.15.3",
-        "orca-gym": "26.7.1",
-        "orca-lab": "26.7.1",
+        "numpy": "2.2.6",
+        "scipy": "1.16.2",
+        "orca-gym": "26.7.3",
+        "orca-lab": "26.7.3",
         "gymnasium": "1.2.1",
         "mujoco": "3.7.0",
         "av": "17.0.1",

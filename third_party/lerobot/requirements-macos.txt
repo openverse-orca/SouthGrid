@@ -523,7 +523,7 @@ scikit-image==0.25.2
     # via
     #   gym-pusht
     #   lerobot
-scipy==1.15.3
+scipy==1.16.2
     # via
     #   dm-control
     #   scikit-image

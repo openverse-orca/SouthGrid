@@ -309,7 +309,7 @@ def main() -> None:
     env = manager.env
     manager.save_video = False
     manager.mode = manager.DataCollectionMode.INFERENCE
-    manager.inference_ui_message = "数据恢复中..."
+    manager.inference_ui_message = "数据回放中..."
 
     stripped = bool(strip is not None and strip.applied)
     if stripped:

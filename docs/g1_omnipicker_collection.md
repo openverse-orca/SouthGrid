@@ -8,7 +8,7 @@
 
 ### 加载场景
 
-1. 请在运行本项目的主机上启动 OrcaLab 7.1。
+1. 请在运行本项目的主机上启动 OrcaLab 7.3。
 2. 请按任务在 OrcaLab 的加载布局对话框中选择对应的布局文件：
    - 四色按按钮任务使用 `src/examples/dataCollection/g1_omnipicker/g1_button.json`
    - 工具整理任务使用 `src/examples/dataCollection/g1_omnipicker/g1_tool.json`
@@ -17,11 +17,10 @@
 
 ### 配置三路相机
 
-打开布局后，请在 OrcaLab 中手动配置以下三路相机（两个场景配置相同）：
+打开布局后，请在 OrcaLab 中手动配置以下两路相机（两个场景配置相同）：
 
 | 相机位置 | OrcaLab 中的相机名称 | Color Port |
 |----------|----------------------|------------|
-| 左腕 | `camera_wrist_l_color` | 7070 |
 | 右腕 | `camera_wrist_r_color` | 7080 |
 | 头部 | `camera_head_color` | 7090 |
 
@@ -293,7 +292,7 @@ LeRobot v2.1 格式如下：
 
 ## 启动前检查
 
-- OrcaLab 版本为 7.1，且 `orca-gym` / `orca-lab` 版本为 26.7.1。
+- OrcaLab 版本为 7.3，且 `orca-gym` / `orca-lab` 版本为 26.7.3。
 - 已在 OrcaLab 中加载对应场景布局（`src/examples/dataCollection/g1_omnipicker/g1_tool.json` 或 `src/examples/dataCollection/g1_omnipicker/g1_button.json`）。
 - `src/examples/dataCollection/common/example.yaml` 中的 `level_name` 与场景名称一致。
 - OrcaGym 服务在 `localhost:50051` 已就绪。
