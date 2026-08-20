@@ -15,11 +15,11 @@ SouthGrid 为南方电网竞赛场景提供人形机器人数据采集、数据�
 
 - Ubuntu 22.04 或 24.04、Conda 与 NVIDIA 驱动（570及以上）。
 - 采集视频需要支持 AV1 NVENC 的 NVIDIA  40系及以上 GPU。
-- Pico 遥操作需要 Android Platform Tools（`adb`）。在 Debian/Ubuntu 上可通过 `sudo apt install adb` 安装。
+- Pico 遥操作需要 Android Platform Tools（`adb`）。在 Ubuntu 上可通过 `sudo apt install adb` 安装。
 - 在 OrcaLab 资产库中订阅下列场景资产：
   - `SouthGrid_Competition_2026`
-  - `G1_omnipicker`
-  - `G1_Pick`
+  - `g1_omnipicker`
+  - `g1_Pick`
 
 ### 获取代码
 
