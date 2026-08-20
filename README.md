@@ -62,7 +62,7 @@ orcalab
 3. 打开资产详情并点击“订阅”。
 4. 完成订阅后关闭并重新启动 OrcaLab，等待资产同步完成。
 
-## Pico 遥操作准备（可选）
+## Pico 遥操作准备
 
 只有使用 Pico 进行遥操作时才需要完成本节。请先按照 Openverse Orca 官方的 [VR 遥操作与数据采集操作指南](https://github.com/openverse-orca/OrcaDocs/blob/main/%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97/%E6%95%B0%E6%8D%AE%E9%87%87%E9%9B%86%E4%B8%8E%E5%90%88%E6%88%90/VR%E9%81%A5%E6%93%8D%E4%BD%9C%E4%B8%8E%E6%95%B0%E6%8D%AE%E9%87%87%E9%9B%86%E6%93%8D%E4%BD%9C%E6%8C%87%E5%8D%97.md) 完成 Pico 应用安装、开发者模式和设备连接。
 
