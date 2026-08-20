@@ -1931,6 +1931,11 @@ def main() -> None:
         print(f"  {summary}", flush=True)
         print(f"  数据位于: {lerobot_out}", flush=True)
         print(f"{'=' * 62}", flush=True)
+        try:
+            scene_manager.show_ui_message(1, "", showtime=0)
+            env.render()
+        except Exception as ui_err:
+            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
         env.close()
 
 

@@ -811,6 +811,11 @@ def main():
             except Exception:
                 pass
         try:
+            scene_manager.show_ui_message(1, "", showtime=0)
+            env.render()
+        except Exception as ui_err:
+            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+        try:
             env.close()
         except Exception:
             pass

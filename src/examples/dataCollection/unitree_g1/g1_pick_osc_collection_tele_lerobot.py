@@ -895,6 +895,11 @@ def main() -> None:
                 orca_logger.warning(f"stop_save_video 失败（可忽略）: {stop_err}")
         close_cameras(cameras)
         try:
+            scene_manager.show_ui_message(1, "", showtime=0)
+            env.render()
+        except Exception as ui_err:
+            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+        try:
             env.close()
         except Exception:
             pass

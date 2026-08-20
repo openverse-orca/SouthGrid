@@ -518,10 +518,12 @@ def main() -> None:
                     orca_logger.info("所有集回放完毕，退出")
                     if manager.scene_manager is not None:
                         manager.scene_manager.show_ui_message(
-                            1, "回放完毕", "0x00ff00", showtime=0
+                            1, "回放完毕", "0x00ff00", showtime=2
                         )
-                        env.render()
+                        _orig_render()
                         time.sleep(1.5)
+                        manager.scene_manager.show_ui_message(1, "", showtime=0)
+                        _orig_render()
                     break
 
             parquet_path = ep_files[ep_idx]
@@ -610,6 +612,12 @@ def main() -> None:
     except Exception as e:
         OrcaLog.get_instance().error(f"Unexpected error: {e}\n{traceback.format_exc()}")
     finally:
+        if manager.scene_manager is not None:
+            try:
+                manager.scene_manager.show_ui_message(1, "", showtime=0)
+                _orig_render()
+            except Exception as ui_err:
+                orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
         try:
             env.close()
         except Exception:

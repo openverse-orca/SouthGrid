@@ -199,6 +199,12 @@ def main() -> None:
     parser.add_argument("--dataset_dir", required=True, help="LeRobot 数据集根目录")
     parser.add_argument("--task_config", default="example.yaml")
     parser.add_argument("--episode", type=int, default=None, help="只回放第 N 集（1 起）")
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=None,
+        help="回放次数（默认播完数据集；集数不够则从头循环凑满）",
+    )
     parser.add_argument("--loop", action="store_true", help="全部播完后从头循环")
     parser.add_argument(
         "--steps_per_frame",
@@ -242,6 +248,11 @@ def main() -> None:
         playlist = [all_files[idx]]
     else:
         playlist = list(all_files)
+    if args.episodes is not None:
+        if args.episodes < 1:
+            parser.error("--episodes 必须 >= 1")
+        base = list(playlist)
+        playlist = [base[i % len(base)] for i in range(args.episodes)]
 
     env_dt = float(args.time_step) * int(args.frame_skip)
     install_osc_patches(
@@ -417,10 +428,12 @@ def main() -> None:
                     orca_logger.info("全部播完，退出")
                     if manager.scene_manager is not None:
                         manager.scene_manager.show_ui_message(
-                            1, "回放完毕", "0x00ff00", showtime=0
+                            1, "回放完毕", "0x00ff00", showtime=2
                         )
-                        env.render()
+                        _orig_render()
                         time.sleep(1.5)
+                        manager.scene_manager.show_ui_message(1, "", showtime=0)
+                        _orig_render()
                     break
 
             parquet_path = ep_files[ep_idx]
@@ -484,6 +497,12 @@ def main() -> None:
     except Exception as e:
         orca_logger.error(f"回放异常: {e}\n{traceback.format_exc()}")
     finally:
+        if manager.scene_manager is not None:
+            try:
+                manager.scene_manager.show_ui_message(1, "", showtime=0)
+                _orig_render()
+            except Exception as ui_err:
+                orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
         try:
             env.close()
         except Exception:
