@@ -3,13 +3,31 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import sys
+import threading
 import time
 import traceback
 
 import cv2
 import numpy as np
 from yaml import Loader, load
+
+# 推理使用自建控制循环；首次 Ctrl+C 请求正常中断和清理，
+# 第二次 Ctrl+C 用于清理过程卡住时强制退出。
+_interrupt = threading.Event()
+
+
+def _install_interrupt_handlers() -> None:
+    def _handler(signum, frame):
+        if _interrupt.is_set():
+            print("\n[强制退出] 再次收到中断信号", flush=True)
+            os._exit(130)
+        _interrupt.set()
+        print("\n[退出] Ctrl+C 收到，正在结束当前评估...", flush=True)
+
+    signal.signal(signal.SIGINT, _handler)
+    signal.signal(signal.SIGTERM, _handler)
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 if project_root not in sys.path:
@@ -370,6 +388,8 @@ def main():
     manager.set_disable_actuator_group([agent_conf.positions_group])
     manager.set_task(EmptyTask(env))
     manager.mode = DataCollectionManager.DataCollectionMode.INFERENCE
+    # DataCollectionManager 构造完成后注册，确保使用本入口的中断处理。
+    _install_interrupt_handlers()
 
     l_arm  = create_arm(env, agent_conf.l_arm)
     r_arm  = create_arm(env, agent_conf.r_arm)
@@ -407,6 +427,10 @@ def main():
         episode_results: list[bool] = []
 
         for episode_index in range(args.episodes):
+            if _interrupt.is_set():
+                orca_logger.info("收到中断，跳过后续 episode")
+                break
+
             orca_logger.info(f"=== Episode {episode_index + 1}/{args.episodes} ===")
 
             env.reset()
@@ -485,20 +509,20 @@ def main():
             step = 0
             truncated = False
 
-            while step < args.max_steps and not truncated:
+            while step < args.max_steps and not truncated and not _interrupt.is_set():
                 # state 由本体感知构造，与采集数据集 observation.state 一致。
                 state = storage.build_state(storage.obs_callback(env))
                 action_chunk = policy_runner.infer_action_chunk(state)
 
                 for model_action in action_chunk:
-                    if step >= args.max_steps or truncated:
+                    if step >= args.max_steps or truncated or _interrupt.is_set():
                         break
 
                     parsed_action = parse_policy_action(model_action)
                     device.set_target(**action_dict_for_apply(parsed_action))
 
                     for _ in range(args.action_repeat):
-                        if step >= args.max_steps or truncated:
+                        if step >= args.max_steps or truncated or _interrupt.is_set():
                             break
 
                         start_time = time.time()
@@ -571,15 +595,35 @@ def main():
                             if remain > 0:
                                 time.sleep(remain)
 
+            if _interrupt.is_set():
+                truncated = True
             completed = not truncated
             episode_results.append(completed)
             orca_logger.info(
                 f"[{'done' if completed else 'stopped'}] "
                 f"Episode {episode_index + 1} finished: steps={step}  truncated={truncated}"
             )
+            if completed:
+                scene_manager.show_ui_message(1, "推理完成", "0x00ff00", showtime=0)
+            else:
+                scene_manager.show_ui_message(1, "推理中断", "0xff8800", showtime=0)
+            if _interrupt.is_set():
+                orca_logger.info("用户中断，结束评估")
+                break
 
         done_count = sum(1 for ok in episode_results if ok)
         orca_logger.info(f"全部 {len(episode_results)} 集完成: {done_count} 集完整跑完")
+
+        if not _interrupt.is_set():
+            scene_manager.show_ui_message(1, "推理完成", "0x00ff00", showtime=0)
+            orca_logger.info("推理完成，场景保持打开，按 Ctrl+C 退出")
+            print("推理完成，场景保持打开，按 Ctrl+C 退出", flush=True)
+            while not _interrupt.is_set():
+                if device is not None:
+                    action = manager.run_controllers()
+                    env.step(action)
+                env.render()
+                time.sleep(0.05)
 
     finally:
         if _shared_cameras:

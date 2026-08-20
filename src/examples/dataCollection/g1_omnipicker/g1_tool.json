@@ -1170,7 +1170,7 @@
                         },
                         {
                             "name": "rootPrim",
-                            "index": 1
+                            "index": 0
                         },
                         {
                             "name": "robot_holder1",
@@ -1182,7 +1182,7 @@
                         },
                         {
                             "name": "body_link1",
-                            "index": 3
+                            "index": 0
                         },
                         {
                             "name": "body_link2",
@@ -1190,7 +1190,7 @@
                         },
                         {
                             "name": "head_link1",
-                            "index": 3
+                            "index": 5
                         },
                         {
                             "name": "head_link2",
@@ -1198,7 +1198,7 @@
                         },
                         {
                             "name": "camera_head_body1",
-                            "index": 3
+                            "index": 2
                         },
                         {
                             "name": "camera_head_body2",
@@ -1218,11 +1218,6 @@
                             "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
                             "type_index": 0,
                             "property_overrides": [
-                                {
-                                    "name": "NearClipDistance",
-                                    "value": 0.05000000074505806,
-                                    "type": "float"
-                                },
                                 {
                                     "name": "ColorCamera",
                                     "value": true,
@@ -1260,7 +1255,7 @@
                         },
                         {
                             "name": "rootPrim",
-                            "index": 1
+                            "index": 0
                         },
                         {
                             "name": "robot_holder1",
@@ -1272,7 +1267,97 @@
                         },
                         {
                             "name": "body_link1",
+                            "index": 0
+                        },
+                        {
+                            "name": "body_link2",
+                            "index": 2
+                        },
+                        {
+                            "name": "arm_l_link1",
                             "index": 3
+                        },
+                        {
+                            "name": "arm_l_link2",
+                            "index": 2
+                        },
+                        {
+                            "name": "arm_l_link3",
+                            "index": 0
+                        },
+                        {
+                            "name": "arm_l_link4",
+                            "index": 1
+                        },
+                        {
+                            "name": "arm_l_link5",
+                            "index": 1
+                        },
+                        {
+                            "name": "arm_l_link6",
+                            "index": 2
+                        },
+                        {
+                            "name": "arm_l_end_link",
+                            "index": 1
+                        },
+                        {
+                            "name": "camera_left_body1",
+                            "index": 8
+                        },
+                        {
+                            "name": "camera_left_body2",
+                            "index": 0
+                        },
+                        {
+                            "name": "cameras",
+                            "index": 1
+                        },
+                        {
+                            "name": "camera_left",
+                            "index": 0
+                        }
+                    ],
+                    "group_overrids": [
+                        {
+                            "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
+                            "type_index": 0,
+                            "property_overrides": [
+                                {
+                                    "name": "ColorPort",
+                                    "value": 7070,
+                                    "type": "int"
+                                },
+                                {
+                                    "name": "DepthPort",
+                                    "value": 7071,
+                                    "type": "int"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "entity_path": [
+                        {
+                            "name": "mujoco_wrap",
+                            "index": 0
+                        },
+                        {
+                            "name": "rootPrim",
+                            "index": 0
+                        },
+                        {
+                            "name": "robot_holder1",
+                            "index": 0
+                        },
+                        {
+                            "name": "robot_holder1",
+                            "index": 0
+                        },
+                        {
+                            "name": "body_link1",
+                            "index": 0
                         },
                         {
                             "name": "body_link2",
@@ -1280,7 +1365,7 @@
                         },
                         {
                             "name": "arm_r_link1",
-                            "index": 2
+                            "index": 1
                         },
                         {
                             "name": "arm_r_link2",
@@ -1288,15 +1373,15 @@
                         },
                         {
                             "name": "arm_r_link3",
-                            "index": 1
+                            "index": 2
                         },
                         {
                             "name": "arm_r_link4",
-                            "index": 1
+                            "index": 2
                         },
                         {
                             "name": "arm_r_link5",
-                            "index": 2
+                            "index": 0
                         },
                         {
                             "name": "arm_r_link6",
@@ -1304,11 +1389,11 @@
                         },
                         {
                             "name": "arm_r_end_link",
-                            "index": 2
+                            "index": 1
                         },
                         {
                             "name": "camera_right_body1",
-                            "index": 0
+                            "index": 2
                         },
                         {
                             "name": "camera_right_body2",
@@ -1316,7 +1401,7 @@
                         },
                         {
                             "name": "cameras",
-                            "index": 0
+                            "index": 1
                         },
                         {
                             "name": "camera_right",
@@ -1328,11 +1413,6 @@
                             "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
                             "type_index": 0,
                             "property_overrides": [
-                                {
-                                    "name": "NearClipDistance",
-                                    "value": 0.10000000149011612,
-                                    "type": "float"
-                                },
                                 {
                                     "name": "ColorCamera",
                                     "value": true,
@@ -1352,106 +1432,6 @@
                                     "name": "DepthPort",
                                     "value": 7081,
                                     "type": "int"
-                                },
-                                {
-                                    "name": "Enable",
-                                    "value": true,
-                                    "type": "bool"
-                                }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "entity_path": [
-                        {
-                            "name": "mujoco_wrap",
-                            "index": 0
-                        },
-                        {
-                            "name": "rootPrim",
-                            "index": 1
-                        },
-                        {
-                            "name": "robot_holder1",
-                            "index": 0
-                        },
-                        {
-                            "name": "robot_holder1",
-                            "index": 0
-                        },
-                        {
-                            "name": "body_link1",
-                            "index": 3
-                        },
-                        {
-                            "name": "body_link2",
-                            "index": 2
-                        },
-                        {
-                            "name": "arm_l_link1",
-                            "index": 0
-                        },
-                        {
-                            "name": "arm_l_link2",
-                            "index": 3
-                        },
-                        {
-                            "name": "arm_l_link3",
-                            "index": 0
-                        },
-                        {
-                            "name": "arm_l_link4",
-                            "index": 3
-                        },
-                        {
-                            "name": "arm_l_link5",
-                            "index": 1
-                        },
-                        {
-                            "name": "arm_l_link6",
-                            "index": 1
-                        },
-                        {
-                            "name": "arm_l_end_link",
-                            "index": 3
-                        },
-                        {
-                            "name": "camera_left_body1",
-                            "index": 2
-                        },
-                        {
-                            "name": "camera_left_body2",
-                            "index": 2
-                        },
-                        {
-                            "name": "cameras",
-                            "index": 2
-                        },
-                        {
-                            "name": "camera_left",
-                            "index": 0
-                        }
-                    ],
-                    "group_overrids": [
-                        {
-                            "type_id": "{CA85BDD5-C631-4C52-853C-06D654AE7E4D}",
-                            "type_index": 0,
-                            "property_overrides": [
-                                {
-                                    "name": "NearClipDistance",
-                                    "value": 0.05000000074505806,
-                                    "type": "float"
-                                },
-                                {
-                                    "name": "ColorCamera",
-                                    "value": true,
-                                    "type": "bool"
-                                },
-                                {
-                                    "name": "UseNvEnc",
-                                    "value": true,
-                                    "type": "bool"
                                 },
                                 {
                                     "name": "Enable",
