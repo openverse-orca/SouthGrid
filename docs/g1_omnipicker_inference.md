@@ -179,7 +179,7 @@ python eval_g1_omnipicker_tool_lerobot.py \
 
 **现象**：找不到 `openpi_client`。**处理**：请在仓库根目录重新执行 `bash scripts/install_runtime.sh`，不要添加外部源码路径。
 
-**现象**：相机超时。**处理**：请按采集文档重新配置相机端口，并确认 Recording 已勾选。
+**现象**：相机超时。**处理**：请按采集文档重新配置相机端口，并确认 IsRecording 已勾选。
 
 **现象**：WebSocket 连接失败（远程场景）。**处理**：确认服务器防火墙已放行 8010 端口，或改用 SSH 隧道方案。
 
