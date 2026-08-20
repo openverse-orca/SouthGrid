@@ -30,6 +30,9 @@ def main() -> None:
     expected_versions = {
         "numpy": "2.2.6",
         "scipy": "1.16.2",
+        "scipy-stubs": "1.16.2.0",
+        "numpy-typing-compat": "20250818.2.2",
+        "optype": "0.13.4",
         "orca-gym": "26.7.3",
         "orca-lab": "26.7.3",
         "gymnasium": "1.2.1",
@@ -41,7 +44,19 @@ def main() -> None:
         "torchvision": "0.22.1+cpu",
         "datasets": "3.6.0",
         "lerobot": "0.3.4+orca.1",
+        "televuer": "4.0.0+orca.1",
         "openpi-client": "0.1.0+orca.1",
+        "aiohttp-cors": "0.8.1",
+        "argcomplete": "3.7.0",
+        "dm-tree": "0.1.10",
+        "expandvars": "1.1.2",
+        "killport": "1.2.0",
+        "msgpack": "1.1.2",
+        "params-proto": "2.13.2",
+        "psutil": "7.1.2",
+        "vuer": "0.0.60",
+        "waterbear": "2.6.8",
+        "wrapt": "2.2.1",
     }
     for distribution, expected in expected_versions.items():
         _assert_version(distribution, expected)
@@ -56,9 +71,17 @@ def main() -> None:
 
     import av
     import cv2
+    import psutil
+    import tree
     import lerobot
+    import televuer
     import openpi_client
     from openpi_client import msgpack_numpy
+
+    if tree.map_structure(lambda value: value + 1, {"value": 1}) != {"value": 2}:
+        raise RuntimeError("dm-tree runtime check failed")
+    if psutil.Process().pid <= 0:
+        raise RuntimeError("psutil runtime check failed")
 
     gui_line = next(
         (line for line in cv2.getBuildInformation().splitlines() if "GUI:" in line),
@@ -166,7 +189,7 @@ def main() -> None:
     print(f"  Python: {sys.version.split()[0]}")
     print(f"  OpenCV: {gui_line.strip()}")
     print(f"  OrcaLab/OrcaGym: {importlib.metadata.version('orca-lab')} / {_orca_gym_version}")
-    print("  LeRobot/OpenPI client: installed from repository-owned sources")
+    print("  LeRobot/TeleVuer/OpenPI client: installed from repository-owned sources")
 
 
 if __name__ == "__main__":

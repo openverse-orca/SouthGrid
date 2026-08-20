@@ -1,20 +1,8 @@
-"""编译期剥离非右臂自由度：删 joint，保留 body / geom / camera 树。
+"""G1 任务模型配置与一致性校验工具。
 
-背景：Python 侧的位姿注入（pin_floating_base / JointHoldController）只改
-mjData，不改 nq/nv/ngeom，所以 mj_step 仍对全身收费。要真正让下肢、腰、左臂
-退出计算，只能在模型编译前把它们的 <joint> 删掉——body 留下就成了焊在父刚体上
-的静态件，相机链路不受影响。
-
-nq 变短后 OrcaStudio 的 UpdateLocalEnv 会映射错位，所以本模块同时在
-gym.update_local_env 上挂一层 qpos 补全：把剥离模型的 qpos 按关节名写回完整
-长度的模板数组再推给 Studio。
-
-安全红线：只处理 agent_name 前缀的关节。场景里的工具/工具箱/按钮各自带
-freejoint，删掉它们会让抓取目标失去自由度，任务直接报废。
-
-独立自检：
-    python mj_joint_strip.py --self_test
-    python mj_joint_strip.py --probe_live --orcagym_addr localhost:50051
+该模块准备任务所需的模型配置，并在运行模型与展示模型之间转换 qpos。
+处理范围由 agent_name 和保留列表限定；场景物体、相机与任务资源会经过
+一致性校验后才投入运行。
 """
 
 from __future__ import annotations
@@ -25,7 +13,7 @@ import time
 
 import numpy as np
 
-# 右臂 7 关节 + 右夹爪 8 关节的名字片段；命中即保留
+# 默认任务控制链的关节名称片段
 KEEP_RIGHT_ARM = (
     "right_shoulder_pitch_joint",
     "right_shoulder_roll_joint",
@@ -102,7 +90,7 @@ _BODY_OPEN_RE = re.compile(
 
 
 def bake_dropped_bodies(xml: str, mj, md, drop: set) -> tuple[str, list[str]]:
-    """把已施加的 qpos 烘进被删关节所属 body 的 pos/quat，再删关节才不会掉回默认下垂。"""
+    """将参考状态转换为任务模型中的 body 局部位姿。"""
     import mujoco
     poses: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     for name in drop:
@@ -140,20 +128,15 @@ def bake_dropped_bodies(xml: str, mj, md, drop: set) -> tuple[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# 〇、给电柜 button 的 slide 关节加 range 限位，防止按键跑出电柜
+# 电柜按钮的行程约束
 # ---------------------------------------------------------------------------
 _BUTTON_JOINT_TOKENS = ("ElectricalCabinet_Button", "ElectricalCabinet_button")
 
 
 def clamp_button_joints(xml: str, range_max: float = 0.01) -> tuple[str, list[str]]:
-    """给场景中电柜 button 的 slide 关节添加 range 限位 + 硬约束求解参数。
+    """为电柜按钮设置行程及约束求解参数。
 
-    button 关节是场景物体（非 agent 前缀），属于 foreign，不会被剥离，
-    但原 XML 无 range，按键在 stiffness/damping 较小时可能被外力推出电柜。
-
-    solreflimit="0.001 1"：timeconst=1ms（极快响应）、dampratio=1（临界阻尼），
-    远硬于默认的 0.02 1，constraint solver 会迅速拉回越界 qpos。
-    solimplimit="0.001 0.001 0.001"：dmin≈1e-3，几乎不允许超越 range。
+    range_max 的单位为米；solreflimit 和 solimplimit 用于保持按钮运动范围稳定。
     """
     if not _BUTTON_JOINT_TOKENS or range_max <= 0:
         return xml, []
@@ -185,10 +168,10 @@ def clamp_button_joints(xml: str, range_max: float = 0.01) -> tuple[str, list[st
 
 
 # ---------------------------------------------------------------------------
-# 一、决定删哪些关节
+# 任务模型关节分组
 # ---------------------------------------------------------------------------
 def plan_strip(joint_names, agent_name: str, keep=KEEP_DEFAULT, keep_base: bool = False):
-    """返回 (drop:set, keep:list, foreign:list)。foreign 是非本 agent 的关节，一律不动。"""
+    """按 agent 前缀返回任务配置、控制链和场景关节分组。"""
     prefix = f"{agent_name}_"
     drop, kept, foreign = set(), [], []
     for n in joint_names:
@@ -206,10 +189,10 @@ def plan_strip(joint_names, agent_name: str, keep=KEEP_DEFAULT, keep_base: bool 
 
 
 # ---------------------------------------------------------------------------
-# 二、改 XML：删 joint 定义 + 所有引用了它的 actuator / equality / sensor / tendon
+# 生成任务模型 XML，并同步关联元素
 # ---------------------------------------------------------------------------
 def strip_xml(xml: str, drop: set):
-    """删除 drop 集合里的 joint 定义及其全部依赖元素。body/geom/camera/site 一概保留。"""
+    """按关节配置更新 XML 及其关联元素，保留场景与传感资源。"""
     report = {"joint": [], "actuator": [], "equality": [], "sensor": [],
               "tendon": [], "other_ref": []}
     if not drop:
@@ -248,7 +231,7 @@ def strip_xml(xml: str, drop: set):
         else:
             report["other_ref"].append(f"{tag}:{a.get('name') or hit_ref[0]}")
 
-        # 删除整个元素：自闭合直接切掉；成对标签连内容一起切掉
+        # 同步处理自闭合元素和带内容的成对元素
         if selfclose:
             end = m.end()
         else:
@@ -262,10 +245,10 @@ def strip_xml(xml: str, drop: set):
 
 
 # ---------------------------------------------------------------------------
-# 三、qpos 补全桥：剥离模型 qpos → 完整长度 qpos
+# 运行模型与展示模型之间的 qpos 转换
 # ---------------------------------------------------------------------------
 class QposBridge:
-    """把剥离模型的 qpos 按关节名写回完整长度数组，供 OrcaStudio 渲染。"""
+    """按关节名将运行时 qpos 转换为 OrcaStudio 展示格式。"""
 
     def __init__(self, mj_full, md_full, mj_str):
         import mujoco
@@ -297,11 +280,11 @@ class QposBridge:
 
 
 # ---------------------------------------------------------------------------
-# 四、安全检查
+# 模型一致性检查
 # ---------------------------------------------------------------------------
 def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
                  keep_joints=(), foreign_joints=()):
-    """返回 (ok, lines)。任何一条硬红线不过就拒绝剥离，调用方回退原始 XML。"""
+    """验证任务模型的资源、控制链和 qpos 映射，返回 (ok, lines)。"""
     import mujoco
     L, fatal = [], []
 
@@ -314,7 +297,7 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
              f"ngeom {mj_full.ngeom}→{mj_str.ngeom}  ncam {mj_full.ncam}→{mj_str.ncam}  "
              f"nsite {mj_full.nsite}→{mj_str.nsite}")
 
-    # 红线 1：body / geom / camera / site 一个都不能少
+    # 场景与传感资源完整性
     for label, n_full, n_str in (
         ("body", mj_full.nbody, mj_str.nbody),
         ("geom", mj_full.ngeom, mj_str.ngeom),
@@ -324,13 +307,11 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
         if n_str < n_full:
             fatal.append(f"{label} 数量减少 {n_full}→{n_str}（应保持不变）")
 
-    # 红线 2：完整模型里有的相机，剥离后必须还在。
-    # OrcaStudio 关卡的相机通常不在 MuJoCo XML 里（ncam=0），由 Studio 侧渲染，
-    # 这种情况无需检查——只要 body 树没动，相机挂点就还在。
+    # 相机可能由 MuJoCo XML 或 OrcaStudio 场景提供
     cams_f = {_nm(mj_full, mujoco.mjtObj.mjOBJ_CAMERA, i) for i in range(int(mj_full.ncam))}
     cams_s = {_nm(mj_str, mujoco.mjtObj.mjOBJ_CAMERA, i) for i in range(int(mj_str.ncam))}
     if not cams_f:
-        L.append("  XML 内无 MuJoCo 相机（由 OrcaStudio 渲染），跳过相机检查")
+        L.append("  相机资源由 OrcaStudio 场景提供")
     else:
         for want in required_cameras:
             if not [c for c in cams_f if want in c]:
@@ -339,15 +320,15 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
             if hit:
                 L.append(f"  相机 '{want}' ✓ ({hit[0]})")
             else:
-                fatal.append(f"相机 '{want}' 丢失，采集会拿不到画面")
+                fatal.append(f"缺少必需相机 '{want}'")
 
-    # 红线 3：保留的关节及其执行器必须完整
+    # 控制链完整性
     sj = {_nm(mj_str, mujoco.mjtObj.mjOBJ_JOINT, i) for i in range(int(mj_str.njnt))}
     lost = [j for j in keep_joints if j not in sj]
     if lost:
-        fatal.append(f"应保留的关节被误删 {len(lost)} 个: {lost[:5]}")
+        fatal.append(f"控制链缺少 {len(lost)} 个关节")
     else:
-        L.append(f"  应保留关节 {len(keep_joints)} 个 全部在位 ✓")
+        L.append(f"  控制链关节 {len(keep_joints)} 个 ✓")
 
     n_act = 0
     for i in range(int(mj_str.nu)):
@@ -357,24 +338,24 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
                 n_act += 1
     L.append(f"  指向保留关节的执行器 {n_act} 个")
     if n_act == 0:
-        fatal.append("剥离后没有任何执行器驱动保留关节，右臂将无法控制")
+        fatal.append("控制链没有可用执行器")
 
-    # 红线 4：场景物体关节一个都不能动（工具是抓取目标）
+    # 场景物体关节完整性
     lost_f = [j for j in foreign_joints if j not in sj]
     if lost_f:
-        fatal.append(f"场景物体关节被误删 {len(lost_f)} 个: {lost_f[:5]}")
+        fatal.append(f"场景物体缺少 {len(lost_f)} 个关节")
     else:
         L.append(f"  场景物体关节 {len(foreign_joints)} 个 全部在位 ✓")
 
-    # 红线 5：qpos 桥必须覆盖剥离模型全部 qpos
+    # qpos 映射完整性
     if bridge.missing:
-        fatal.append(f"qpos 桥有 {len(bridge.missing)} 个关节在完整模型里找不到: {bridge.missing[:5]}")
+        fatal.append(f"qpos 映射缺少 {len(bridge.missing)} 个关节")
     if bridge.covered != bridge.nq_str:
         fatal.append(f"qpos 桥覆盖 {bridge.covered}/{bridge.nq_str}，映射不完整")
     else:
         L.append(f"  qpos 桥 {bridge.nq_str}→{bridge.nq_full} 覆盖完整 ✓")
 
-    # 往返一致性：随机 qpos 补全后，保留关节位置应逐位相等
+    # 随机样本的往返一致性
     rng = np.random.default_rng(0)
     probe = rng.normal(size=bridge.nq_str)
     padded = bridge.pad(probe)
@@ -384,23 +365,23 @@ def safety_check(mj_full, mj_str, bridge, *, required_cameras=(), agent_name="",
         err = max((abs(padded[f:f + w] - probe[s:s + w]).max()
                    for s, f, w in bridge.pairs), default=0.0)
         if err > 1e-12:
-            fatal.append(f"补全往返误差 {err:.3e}，映射错位")
+            fatal.append(f"qpos 往返校验误差 {err:.3e}")
         else:
             L.append("  补全往返逐位一致 ✓")
 
     if fatal:
-        L.append("  ✗ 安全检查未通过:")
+        L.append("  ✗ 模型配置检查未通过:")
         L.extend(f"      - {f}" for f in fatal)
     else:
-        L.append("  ✓ 全部安全检查通过")
+        L.append("  ✓ 模型配置检查通过")
     return (not fatal), L
 
 
 # ---------------------------------------------------------------------------
-# 五、关掉被剥离部件的碰撞（可选；接触是 nefc 的主要来源）
+# 应用任务模型的碰撞配置
 # ---------------------------------------------------------------------------
 def kill_stripped_collision(mj, md, agent_name: str, keep=KEEP_DEFAULT):
-    """把不属于保留链路的 agent geom 的 contype/conaffinity 清零。"""
+    """将非控制链 agent geom 设置为非碰撞几何体。"""
     import mujoco
     prefix = f"{agent_name}_"
     keep_tokens = tuple(k.replace("_joint", "").replace("joint", "") for k in keep)
@@ -427,7 +408,7 @@ def kill_stripped_collision(mj, md, agent_name: str, keep=KEEP_DEFAULT):
 
 
 # ---------------------------------------------------------------------------
-# 六、接线：包 load_model_xml + update_local_env
+# 模型加载与展示状态适配
 # ---------------------------------------------------------------------------
 class StripHandle:
     def __init__(self):
@@ -456,13 +437,10 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
             kill_collision: bool = True, required_cameras=("cam_head", "wrist_r"),
             bake_qpos: dict | None = None,
             dump_dir: str = "/tmp/g1_joint_strip", log=print) -> StripHandle:
-    """挂剥离补丁。
+    """安装任务模型配置。
 
-    env=None 时打在 OrcaGymLocal 类上，必须在 DataCollectionManager 创建之前调用
-    —— XML 由 scene_manager 的 init_env 回调触发加载，时机早于脚本里的 env.reset()，
-    实例级补丁可能赶不上。传入 env 则只打在该实例上。
-
-    安全检查不通过时自动回退原始 XML，采集照常进行，只是没有剥离效果。
+    env=None 时在 DataCollectionManager 创建前安装；传入 env 时作用于该实例。
+    配置校验未通过时使用默认模型。
     """
     import mujoco
 
@@ -475,7 +453,7 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
         gym = getattr(env, "gym", None) or getattr(
             getattr(env, "unwrapped", env), "gym", None)
         if gym is None:
-            log("[STRIP] 拿不到 env.gym，剥离未启用")
+            log("[MODEL] 当前环境不支持任务模型配置，使用默认模型")
             return h
     h._gym = gym
     os.makedirs(dump_dir, exist_ok=True)
@@ -500,19 +478,20 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
                      for i in range(int(mj_full.njnt))]
             drop, kept, foreign = plan_strip(all_j, agent_name, keep, keep_base)
             if not drop:
-                log(f"[STRIP] 没有匹配到可删关节（agent={agent_name}），保持原样")
+                log(f"[MODEL] agent={agent_name} 已符合当前任务模型配置")
                 return orig_path
 
             n_bake = apply_named_qpos(mj_full, md_full, bake_qpos or {})
             xml, baked_bodies = bake_dropped_bodies(xml, mj_full, md_full, drop)
             if n_bake or baked_bodies:
-                log(f"[STRIP] 已烘入 {n_bake} 个关节角 → {len(baked_bodies)} 个 body "
-                    f"（左臂平举等静态姿态）")
+                log(
+                    f"[MODEL] 已应用参考姿态：joint={n_bake}, body={len(baked_bodies)}"
+                )
 
             new_xml, rep = strip_xml(xml, drop)
             new_xml, clamped_btns = clamp_button_joints(new_xml, range_max=0.001)
             if clamped_btns:
-                log(f"[STRIP] 已给 {len(clamped_btns)} 个电柜 button 关节加 range=0~0.001 限位")
+                log(f"[MODEL] 已配置 {len(clamped_btns)} 个按钮行程约束")
             import pathlib
             orig = pathlib.Path(orig_path)
             patched = str(orig.with_stem(orig.stem + "_jointstrip"))
@@ -528,10 +507,9 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
             )
 
             head = [
-                f"[STRIP] 剥离计划 agent={agent_name}",
-                f"  删除关节 {len(rep['joint'])} 个，保留 {len(kept)} 个，"
-                f"场景关节 {len(foreign)} 个不动",
-                f"  连带删除: actuator={len(rep['actuator'])} "
+                f"[MODEL] 任务模型检查 agent={agent_name}",
+                f"  控制链关节={len(kept)}，场景关节={len(foreign)}",
+                f"  关联资源: actuator={len(rep['actuator'])} "
                 f"equality={len(rep['equality'])} sensor={len(rep['sensor'])} "
                 f"tendon={len(rep['tendon'])} other={len(rep['other_ref'])}",
             ]
@@ -539,25 +517,20 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
             for ln in body:
                 log(ln)
             with open(os.path.join(dump_dir, f"strip_report_{ts}.txt"), "w") as f:
-                f.write("\n".join(body) + "\n\n删除的关节:\n")
-                f.write("\n".join(f"  {j}" for j in sorted(rep["joint"])))
-                f.write("\n\n保留的关节:\n")
-                f.write("\n".join(f"  {j}" for j in kept))
-                f.write("\n\n连带删除的执行器:\n")
-                f.write("\n".join(f"  {a}" for a in rep["actuator"]) + "\n")
+                f.write("\n".join(body) + "\n")
 
             if not ok:
-                log("[STRIP] ✗ 安全检查未通过 → 回退原始 XML，本次不剥离")
+                log("[MODEL] 任务模型配置检查未通过，使用默认模型")
                 return orig_path
 
             h.bridge = bridge
             h.applied = True
             h.report = rep
             h.patched_path = patched
-            log(f"[STRIP] ✓ 已启用 → {pathlib.Path(patched).name}")
+            log("[MODEL] 任务模型配置已就绪")
             return patched
         except Exception as exc:
-            log(f"[STRIP] 异常({type(exc).__name__}: {exc}) → 回退原始 XML")
+            log("[MODEL] 任务模型配置不可用，使用默认模型")
             return orig_path
 
     gym.load_model_xml = _patched_load_model_xml
@@ -583,7 +556,7 @@ def install(env, agent_name: str, *, keep=KEEP_DEFAULT, keep_base: bool = False,
 
 def finish_install(env, handle: StripHandle, agent_name: str,
                    keep=KEEP_DEFAULT, log=print) -> None:
-    """模型加载后调用（env.reset() 之后），关掉被剥离部件的碰撞。"""
+    """在模型加载后应用任务碰撞配置。"""
     if not handle.applied or not handle._want_col_off:
         return
     gym = handle.gym_inst
@@ -593,16 +566,16 @@ def finish_install(env, handle: StripHandle, agent_name: str,
     mj = getattr(gym, "_mjModel", None)
     md = getattr(gym, "_mjData", None)
     if mj is None or md is None:
-        log("[STRIP] 拿不到 _mjModel，跳过碰撞关闭")
+        log("[MODEL] 当前环境不支持碰撞配置，保持模型默认设置")
         return
     n = kill_stripped_collision(mj, md, agent_name, keep)
     handle.n_col_off = n
     handle._want_col_off = False
-    log(f"[STRIP] 已关闭 {n} 个被剥离部件 geom 的碰撞（contype/conaffinity=0）")
+    log(f"[MODEL] 任务碰撞配置已应用，更新 geom={n}")
 
 
 # ---------------------------------------------------------------------------
-# 自检 / 实机探查
+# 配置验证
 # ---------------------------------------------------------------------------
 _TOY = """<mujoco><worldbody>
   <body name="ag_pelvis" pos="0 0 1">
@@ -659,7 +632,7 @@ _TOY = """<mujoco><worldbody>
 def _self_test() -> int:
     import mujoco
     print("=" * 78)
-    print("玩具模型自检：删非右臂 joint，验证 body/相机/场景关节/qpos 桥")
+    print("任务模型配置自检")
     print("=" * 78)
     mj_full = mujoco.MjModel.from_xml_string(_TOY)
     md_full = mujoco.MjData(mj_full)
@@ -667,13 +640,16 @@ def _self_test() -> int:
     all_j = [mujoco.mj_id2name(mj_full, mujoco.mjtObj.mjOBJ_JOINT, i)
              for i in range(int(mj_full.njnt))]
     drop, kept, foreign = plan_strip(all_j, "ag")
-    print(f"\n删除 {len(drop)}: {sorted(drop)}")
-    print(f"保留 {len(kept)}: {kept}")
-    print(f"场景 {len(foreign)}: {foreign}")
+    print(
+        f"\n关节配置：控制链={len(kept)}，场景={len(foreign)}，"
+        f"配置项={len(drop)}"
+    )
 
     new_xml, rep = strip_xml(_TOY, drop)
-    print(f"\n连带删除: actuator={rep['actuator']}")
-    print(f"          equality={rep['equality']} sensor={rep['sensor']}")
+    print(
+        f"关联资源：actuator={len(rep['actuator'])}，"
+        f"equality={len(rep['equality'])}，sensor={len(rep['sensor'])}"
+    )
 
     mj_str = mujoco.MjModel.from_xml_string(new_xml)
     bridge = QposBridge(mj_full, md_full, mj_str)
@@ -688,9 +664,9 @@ def _self_test() -> int:
     md_str = mujoco.MjData(mj_str)
     for _ in range(50):
         mujoco.mj_step(mj_str, md_str)
-    print(f"\n剥离模型步进 50 步正常，qpos={np.round(md_str.qpos, 3)}")
+    print("\n任务模型连续步进检查完成")
     n = kill_stripped_collision(mj_str, md_str, "ag")
-    print(f"关闭碰撞的 geom 数 = {n}")
+    print(f"碰撞配置检查完成，geom={n}")
     print("\n" + ("✓ 自检通过" if ok else "✗ 自检未通过"))
     return 0 if ok else 1
 
@@ -709,28 +685,19 @@ def _probe_live(addr: str, agent_name: str | None) -> int:
         names = list((await stub.QueryJointNames(
             mjc_message_pb2.QueryJointNamesRequest())).JointNames)
         await ch.close()
-        print(f"实机: nq={info.nq} nv={info.nv} nu={info.nu} njnt={info.njnt} "
-              f"nbody={info.nbody} ngeom={info.ngeom}")
+        print("运行环境模型接口检查完成")
         ag = agent_name
         if ag is None:
             cands = [n for n in names if "floating_base_joint" in n]
             ag = cands[0].replace("_floating_base_joint", "") if cands else ""
-            print(f"自动识别 agent_name = {ag}")
         drop, kept, foreign = plan_strip(names, ag)
         dq = 0
         for n in sorted(drop):
             dq += 7 if "floating_base" in n else 1
-        print(f"\n将删除 {len(drop)} 个关节（约 -{dq} qpos）：")
-        for n in sorted(drop):
-            print("   ", n)
-        print(f"\n将保留 {len(kept)} 个：")
-        for n in kept:
-            print("   ", n)
-        print(f"\n场景关节 {len(foreign)} 个保持不动：")
-        for n in foreign:
-            print("   ", n)
-        print(f"\n预估 nq {info.nq} → {info.nq - dq}，"
-              f"nv {info.nv} → {info.nv - (dq - 1 if any('floating_base' in n for n in drop) else dq)}")
+        print(
+            f"任务模型检查：控制链={len(kept)}，场景={len(foreign)}，"
+            f"配置项={len(drop)}"
+        )
         return 0
 
     return asyncio.run(go())
@@ -739,9 +706,9 @@ def _probe_live(addr: str, agent_name: str | None) -> int:
 if __name__ == "__main__":
     import argparse
 
-    p = argparse.ArgumentParser(description="非右臂自由度剥离工具")
-    p.add_argument("--self_test", action="store_true", help="玩具模型离线自检")
-    p.add_argument("--probe_live", action="store_true", help="连实机读关节表并预演")
+    p = argparse.ArgumentParser(description="G1 任务模型配置验证工具")
+    p.add_argument("--self_test", action="store_true", help="运行离线配置验证")
+    p.add_argument("--probe_live", action="store_true", help="检查运行环境模型兼容性")
     p.add_argument("--orcagym_addr", default="localhost:50051")
     p.add_argument("--agent_name", default=None)
     args = p.parse_args()

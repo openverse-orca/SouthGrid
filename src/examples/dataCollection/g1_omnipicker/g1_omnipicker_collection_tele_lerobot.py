@@ -154,7 +154,7 @@ def main() -> None:
     scratch_dir = os.path.join(base_dir, "_lerobot_scratch", "g1_omnipicker", args.level)
     storage = G1OmniPickerLeRobotStorage(dataset_path=scratch_dir)
 
-    # nu=0 时机器人尚未 spawn，返回正确形状占位零向量
+    # 观测回调在初始化前后保持固定输出 schema
     _n_motor = (
         len(g1_omnipicker_conf.gripper_l["actuator_names"])
         + len(g1_omnipicker_conf.gripper_r["actuator_names"])
@@ -198,10 +198,10 @@ def main() -> None:
         if manager.update_scene():
             env.set_default_joint_values(default_joint_values)
 
-            orca_logger.info("Disabling position actuator group")
+            orca_logger.info("正在配置机器人控制器")
             manager.set_disable_actuator_group([g1_omnipicker_conf.positions_group])
 
-            # 夹爪控制（使用 reverse 版本，与原 G1 脚本一致）
+            # 夹爪控制器
             orca_logger.info("Adding left gripper controller")
             controllers.add_gripper_2f85_reverse_pico_controller(
                 manager, env,
@@ -220,7 +220,7 @@ def main() -> None:
                 [PicoJoystickKey.A, PicoJoystickKey.B, PicoJoystickKey.R_TRIGGER],
             )
 
-            # 臂 OSC 控制（保留 G1 的旋转偏置 / 轴重映射 / 轴翻转）
+            # 臂 OSC 的 Pico 到机器人坐标系转换
             L_ARM_ROTATION_OFFSET = np.array([np.pi / 2, 0, 0])
             R_ARM_ROTATION_OFFSET = np.array([-3 * np.pi / 2, 0, 0])
             L_ARM_POSITION_REMAP = [0, 2, 1]
@@ -291,23 +291,23 @@ def main() -> None:
 
             # ── 相机 ──────────────────────────────────────────────────────────
             orca_logger.info(f"启用相机: {list(camera_map.keys())}")
-            print(f"[场景] 机器人已就绪（nu={env.model.nu}），加载相机推流...", flush=True)
+            print("[场景] 机器人已就绪，正在连接相机...", flush=True)
             if args.camera_source == "websocket":
                 os.makedirs(STREAM_TRIGGER_PATH, exist_ok=True)
                 env.begin_save_video(STREAM_TRIGGER_PATH)
                 video_started = True
-                orca_logger.info("begin_save_video 已调用，触发相机推流")
+                orca_logger.info("相机数据流已启动")
                 cameras = bring_up_cameras(camera_map)
                 camera_map = {n: v for n, v in camera_map.items() if n in cameras}
                 if cameras:
                     cam_hw = probe_camera_hw(cameras, camera_map, default_hw=cam_hw_override)
             else:
-                orca_logger.info("mp4 模式：跳过 WebSocket 相机连接，每集 begin_save_video 按集触发")
+                orca_logger.info("MP4 相机模式已启用")
 
     except KeyboardInterrupt:
         orca_logger.info("初始化阶段收到 Ctrl+C，正在释放相机推流会话...")
     except Exception as e:
-        orca_logger.error(f"初始化失败: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"初始化失败: {e}")
 
     def _release_and_close():
         if video_started:
@@ -315,13 +315,13 @@ def main() -> None:
                 env.stop_save_video()
                 orca_logger.info("已停止相机推流")
             except Exception as stop_err:
-                orca_logger.warning(f"stop_save_video 失败（可忽略）: {stop_err}")
+                orca_logger.warning("相机数据流停止时遇到错误")
         close_cameras(cameras)
         try:
             scene_manager.show_ui_message(1, "", showtime=0)
             env.render()
         except Exception as ui_err:
-            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+            orca_logger.warning("界面状态清理未完成")
         try:
             env.close()
         except Exception:
@@ -388,7 +388,7 @@ def main() -> None:
                 raw_key = pj.current_key_state
                 now = time.perf_counter()
 
-                # 首次检测到手柄连接：屏幕提示「已连接手柄，可以开始采集」
+                # 首次连接时显示操作提示
                 if n_clients > 0 and not _first_connect_notified["done"]:
                     _first_connect_notified["done"] = True
                     orca_logger.info("[Pico] 手柄已连接，可以开始采集")
@@ -405,12 +405,11 @@ def main() -> None:
                     sig = (l_sig, r_sig)
                     if sig != _prev_sig:
                         orca_logger.info(
-                            f"[Pico 按键变化] 左[{_fmt_hand_sig(l_sig)}] | "
-                            f"右[{_fmt_hand_sig(r_sig)}]"
+                            "[Pico] 输入状态已更新"
                         )
                         _prev_sig = sig
 
-                    # Grip 按键检测（l_sig[0] / r_sig[0] = gripButtonPressed）
+                    # Grip 组合键处理
                     l_grip = l_sig[0]
                     r_grip = r_sig[0]
                     both_grip = l_grip and r_grip
@@ -442,7 +441,7 @@ def main() -> None:
                             except Exception:
                                 pass
                             _discard_episode_event.set()
-                            manager._shutdown_requested = True  # noqa: SLF001  打断 run_episode
+                            manager._shutdown_requested = True  # noqa: SLF001  结束当前 episode
                             _grip_debounce_t = now
 
                     _r_grip_only_prev = r_grip_only
@@ -459,7 +458,7 @@ def main() -> None:
                 if n_clients == 0:
                     orca_logger.info("[Pico] 无客户端连接（请确认 Pico 端 App 已启动）")
                 else:
-                    orca_logger.info(f"[Pico] {n_clients} 个客户端已连接")
+                    orca_logger.info("[Pico] 手柄连接正常")
 
                 if d_sim < 0:
                     orca_logger.info("[监控] 仿真已重置，等待下一集...")
@@ -467,20 +466,16 @@ def main() -> None:
                 rt = (d_sim / d_wall) if d_wall > 0 else 0.0
                 ctrl_dt = float(env.dt) if float(env.dt) > 0 else 1.0
                 loop_hz = ((d_sim / ctrl_dt) / d_wall) if d_wall > 0 else 0.0
-                orca_logger.info(
-                    f"[监控] 仿真实时比 {rt:.2f}x / 控制频率 {loop_hz:.1f} Hz"
-                )
+                orca_logger.info("[监控] 系统运行正常")
             except Exception:
                 pass
 
     _monitor = threading.Thread(target=_status_monitor, daemon=True)
     _monitor.start()
 
-    # ── 采集前手臂冻结门控 + 左臂锁定 ─────────────────────────────────────────
-    # 场景重置后、按左Grip开始采集前，机械臂/夹爪不响应手柄（保持静止）；
-    # 仅放行 L_GRIPBUTTON（任务状态：开始/保存）。开始采集(RUNNING)后放行全部按键。
-    # 左臂位姿（L_TRANSFORM）始终锁定，不响应手柄。
-    # 由于 run_controllers() 每步调用 device.update()，此处覆盖 update 做按键门控。
+    # ── 采集输入门控 ───────────────────────────────────────────────────────
+    # 开始采集前仅响应任务状态按键；采集中启用操作按键。
+    # 左臂保持预设姿态，不响应 L_TRANSFORM。
     _LOCKED_KEYS = {PicoJoystickKey.L_TRANSFORM}
     _all_pico_keys = [k for k in pico_device.keys if k not in _LOCKED_KEYS]
     _pre_start_keys = [
@@ -527,7 +522,7 @@ def main() -> None:
             "0x00ff00", showtime=0,
         )
     except Exception as ui_err:
-        orca_logger.warning(f"VR 提示发送失败（可忽略）: {ui_err}")
+        orca_logger.warning("界面提示暂不可用")
 
     # ── 主循环 ────────────────────────────────────────────────────────────────
     orca_logger.info(f"开始采集，LeRobot 输出: {lerobot_out}")
@@ -561,7 +556,7 @@ def main() -> None:
                 env.reset()
                 time.sleep(0.1)
                 if not manager.update_scene():
-                    orca_logger.info("update_scene 失败，停止采集")
+                    orca_logger.info("场景更新失败，停止采集")
                     break
                 env.set_default_joint_values(default_joint_values)
 
@@ -583,7 +578,7 @@ def main() -> None:
                 )
 
                 _ep_t0 = time.perf_counter()
-                # run_episode() 返回 (task_is_success, record_start_time, record_end_time, initial_joint_qpos)
+                # 执行一集遥操作采集
                 _task_is_success, _rec_start, _rec_end, _init_qpos = manager.run_episode()
                 _ep_dur = time.perf_counter() - _ep_t0
 
@@ -594,13 +589,13 @@ def main() -> None:
                     try:
                         env.stop_save_video()
                     except Exception as _stop_e:
-                        orca_logger.warning(f"stop_save_video 失败（可忽略）: {_stop_e}")
+                        orca_logger.warning("相机数据流停止时遇到错误")
                     video_started = False
 
                 # 右Grip单按：丢弃本集并继续下一集
                 if _discard_episode_event.is_set():
                     _discard_episode_event.clear()
-                    manager._shutdown_requested = False  # noqa: SLF001  恢复，让外层循环继续
+                    manager._shutdown_requested = False  # noqa: SLF001  继续下一集
                     storage.clear_data()
                     orca_logger.info(f"[EP {_ep_idx}] 已丢弃本集（右Grip），重置场景")
                     continue
@@ -623,8 +618,8 @@ def main() -> None:
                         f"目标 {args.fps} 的 90%，建议降低 --fps。"
                     )
 
-                # 强制保存：不判断 _task_is_success，无论如何均保存本集
-                orca_logger.info(f"[EP {_ep_idx}] 强制保存本集数据（task_success={_task_is_success}）")
+                # 按当前采集模式保存本集
+                orca_logger.info(f"[EP {_ep_idx}] 正在保存本集数据")
                 storage.save_data(
                     task_info=manager.task.get_task_info(),
                     scene_info=scene_manager.get_scene_info(),
@@ -644,7 +639,7 @@ def main() -> None:
         orca_logger.info("KeyboardInterrupt，停止采集")
         print("\n[停止] 采集已中断", flush=True)
     except Exception as e:
-        orca_logger.error(f"采集异常: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"采集异常: {e}")
     finally:
         _monitor_stop.set()
         if writer is not None:
@@ -661,7 +656,7 @@ def main() -> None:
                 env.stop_save_video()
                 orca_logger.info("已停止相机推流")
             except Exception as stop_err:
-                orca_logger.warning(f"stop_save_video 失败（可忽略）: {stop_err}")
+                orca_logger.warning("相机数据流停止时遇到错误")
         close_cameras(cameras)
         try:
             env.close()
@@ -682,9 +677,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        orca_logger.info("KeyboardInterrupt, End")
+        orca_logger.info("已收到中断请求")
     except Exception as e:
-        OrcaLog.get_instance().error(f"Unexpected error: {e}\n{traceback.format_exc()}")
+        OrcaLog.get_instance().error(f"程序异常: {e}")
     finally:
-        orca_logger.info("Exiting program")
+        orca_logger.info("程序已退出")
         os._exit(0)

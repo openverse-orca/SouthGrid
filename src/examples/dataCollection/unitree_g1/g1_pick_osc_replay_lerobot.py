@@ -1,8 +1,6 @@
-"""回放 g1_pick_osc 脚本化采集写出的 LeRobot v2.1 数据集。
+"""回放 G1 Pick OSC 脚本化采集生成的 LeRobot v2.1 数据集。
 
-环境与 g1_pick_osc_collection_scripted_lerobot.py 一致：
-右臂 OSC + 右爪 2F85 + joint_strip。数据源换成 parquet 的 18 维 action，
-只驱动右臂 / 右爪；左臂那 9 维丢掉（strip 后左臂已不存在）。
+回放器读取数据集中的右臂末端目标与右夹爪动作，并按采集时的控制配置执行。
 """
 
 from __future__ import annotations
@@ -194,7 +192,7 @@ class G1OscParquetReplayDevice(AbstractDevice):
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="回放 g1_pick_osc 脚本化采集的 LeRobot parquet（只开右臂 OSC）"
+        description="回放 G1 Pick OSC 脚本化采集生成的 LeRobot 数据集"
     )
     parser.add_argument("--dataset_dir", required=True, help="LeRobot 数据集根目录")
     parser.add_argument("--task_config", default="example.yaml")
@@ -225,8 +223,14 @@ def main() -> None:
     parser.add_argument("--track_ki", type=float, default=0.0)
     parser.add_argument("--track_clamp", type=float, default=0.08)
     parser.add_argument("--track_log_every", type=int, default=20)
-    parser.add_argument("--joint_strip", choices=["off", "on"], default="on")
-    parser.add_argument("--strip_col", choices=["off", "keep"], default="off")
+    parser.add_argument(
+        "--joint_strip", choices=["off", "on"], default="on",
+        help="选择任务模型配置：on 使用回放任务配置，off 使用完整模型配置。",
+    )
+    parser.add_argument(
+        "--strip_col", choices=["off", "keep"], default="off",
+        help="任务模型的碰撞配置：off 使用回放配置，keep 保留完整配置。",
+    )
     parser.add_argument("--time_step", type=float, default=0.001)
     parser.add_argument("--frame_skip", type=int, default=5)
     parser.add_argument("--render_every", type=int, default=5)
@@ -272,8 +276,7 @@ def main() -> None:
     print(f"  数据集: {dataset_dir}", flush=True)
     print(f"  共 {len(all_files)} 集，待播 {len(playlist)} 集", flush=True)
     print(
-        f"  steps_per_frame={args.steps_per_frame}  dt={env_dt * 1000:.0f}ms  "
-        f"DLS λ={args.dls_lambda}  kp={args.kp}  ki={args.track_ki}",
+        f"  每帧控制步: {args.steps_per_frame}  控制周期: {env_dt * 1000:.0f}ms",
         flush=True,
     )
     print("=" * 62, flush=True)
@@ -285,7 +288,7 @@ def main() -> None:
     else:
         scene_config["data_collection"] = {"agent_joint_prefix": f"{args.agent_name}_"}
     scene_manager = SceneManager(args.orcagym_addr, config=scene_config)
-    scene_manager.show_ui_message(1, "脚本控制：G1 OSC parquet 回放", "0xffff00", showtime=5)
+    scene_manager.show_ui_message(1, "G1 数据回放准备中", "0xffff00", showtime=5)
     scene_manager.get_scene_data(os.path.basename(__file__), "beginscene")
 
     strip = None
@@ -345,9 +348,7 @@ def main() -> None:
             return
         env.set_default_joint_values(default_joint_values)
         print(
-            f"[STRIP] {'生效' if stripped else '未启用'} "
-            f"nq={env.model.nq} nv={env.model.nv} nu={env.model.nu}"
-            f"  dt={env_dt * 1000:.0f}ms",
+            "[MODEL] 回放任务模型配置已加载",
             flush=True,
         )
 
@@ -375,10 +376,10 @@ def main() -> None:
             kp_val = float(np.clip(args.kp, 1.0, 300.0))
             r_arm.controller.kp = np.ones(6, dtype=np.float64) * kp_val
             r_arm.controller.kd = 2.0 * np.sqrt(r_arm.controller.kp)
-            orca_logger.info(f"OSC 阻抗刚度 kp 设为 {kp_val}（kd=2√kp 临界阻尼）")
+            orca_logger.info("[CONTROL] OSC 阻抗参数已加载")
 
         if stripped:
-            orca_logger.info("[STRIP] base/腰/下肢/左爪已剥离焊死，左臂保留自由演化，跳过 pin_all_joints")
+            orca_logger.info("[MODEL] 回放任务模型配置已应用，姿态约束初始化完成")
         else:
             tele.pin_all_joints(env, args.agent_name)
 
@@ -388,7 +389,7 @@ def main() -> None:
         )
         manager.set_task_status_controller(task_status)
     except Exception as e:
-        orca_logger.error(f"初始化失败: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"初始化失败: {e}")
 
     if r_arm is None or r_grip is None or task_status is None:
         orca_logger.error("控制器未创建成功，退出")
@@ -443,8 +444,7 @@ def main() -> None:
             n_frames = ep_data["n_frames"]
             spf = args.steps_per_frame
             orca_logger.info(
-                f"=== 回放 {ep_name} ({ep_idx}/{ep_total})  "
-                f"{n_frames} 帧 × {spf} = {n_frames * spf} 控制步 ==="
+                f"=== 回放第 {ep_idx}/{ep_total} 集 ==="
             )
 
             env.reset()
@@ -462,7 +462,7 @@ def main() -> None:
             time.sleep(0.05)
 
             r_pos, r_quat = _query_r_ee_b(env)
-            orca_logger.info(f"  [reset] R_ee={np.round(r_pos, 4).tolist()}")
+            orca_logger.info("场景状态已重置")
             r_arm.update_action_position(r_pos)
             r_arm.update_action_axisangle(r_quat)
             r_grip.update_ctrl(np.asarray(ep_data["r_grip"][0], dtype=np.float32))
@@ -471,7 +471,7 @@ def main() -> None:
                 env.render()
 
             r_pos, _ = _query_r_ee_b(env)
-            orca_logger.info(f"  [init] 开播前 R_ee={np.round(r_pos, 4).tolist()}")
+            orca_logger.info("回放控制器已初始化")
 
             device = G1OscParquetReplayDevice(
                 env,
@@ -488,21 +488,19 @@ def main() -> None:
             t0 = time.perf_counter()
             manager.run_episode()
             orca_logger.info(
-                f"  播完 {ep_name}：{device._call_count} 控制步 / "
-                f"{time.perf_counter() - t0:.1f}s"
-                f"{'' if device.finished else '（未跑完）'}"
+                f"  第 {ep_idx} 集回放结束，用时 {time.perf_counter() - t0:.1f}s"
             )
     except KeyboardInterrupt:
         orca_logger.info("KeyboardInterrupt，停止回放")
     except Exception as e:
-        orca_logger.error(f"回放异常: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"回放异常: {e}")
     finally:
         if manager.scene_manager is not None:
             try:
                 manager.scene_manager.show_ui_message(1, "", showtime=0)
                 _orig_render()
             except Exception as ui_err:
-                orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+                orca_logger.warning("界面状态清理未完成")
         try:
             env.close()
         except Exception:
@@ -513,10 +511,10 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        orca_logger.info("KeyboardInterrupt, End")
+        orca_logger.info("已收到中断请求")
     except Exception as e:
-        OrcaLog.get_instance().error(f"Error: {e}\n{traceback.format_exc()}")
+        OrcaLog.get_instance().error(f"程序异常: {e}")
         raise
     finally:
-        orca_logger.info("Exiting program")
+        orca_logger.info("程序已退出")
         os._exit(0)

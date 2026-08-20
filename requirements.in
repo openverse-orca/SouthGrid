@@ -31,6 +31,7 @@ grpcio==1.66.1
 grpcio-tools==1.66.1
 gymnasium==1.2.1
 mujoco==3.7.0
+scipy-stubs==1.16.2
 
 # OrcaLab 26.7.3 (the desktop application) runtime dependencies. OrcaLab is
 # installed with --no-deps for the same reason as OrcaGym; the entries below are
@@ -46,6 +47,10 @@ mujoco==3.7.0
 # leaving it open would let every rebuild pull a different MCP stack.
 fastmcp==3.4.7
 pyside6==6.9.2
+aiohttp==3.13.1
+psutil==7.1.2
+requests==2.32.5
+filelock==3.29.0
 qasync==0.28.0
 tomli_w==1.2.0
 
@@ -72,3 +77,16 @@ opencv-python==4.13.0.92
 pyyaml==6.0.3
 termcolor==3.3.0
 typing-extensions==4.15.0
+
+# Repository-owned OpenPI client runtime dependencies. Keep the full dependency
+# set explicit because install_runtime.sh installs the client with --no-deps.
+dm-tree==0.1.10
+msgpack==1.1.2
+websockets==16.0
+
+# Retained from the known-good OrcaLab 7.1 delivery environment. These packages
+# are additive compatibility dependencies; keeping them in the lock prevents a
+# delivery cleanup from silently shrinking the validated runtime again.
+aiohttp-cors==0.8.1
+killport==1.2.0
+vuer==0.0.60

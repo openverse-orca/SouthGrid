@@ -40,6 +40,7 @@ python -m pip install --no-deps "orca-lab==26.7.3"
 # Repository-owned sources are installed last. No developer-machine path or
 # unpinned Git checkout is consulted.
 python -m pip install --no-deps --no-build-isolation ./third_party/lerobot
+python -m pip install --no-deps --no-build-isolation ./third_party/televuer
 python -m pip install --no-deps --no-build-isolation ./third_party/openpi-client
 
 python scripts/verify_environment.py

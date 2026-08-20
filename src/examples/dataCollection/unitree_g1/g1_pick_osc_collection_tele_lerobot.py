@@ -56,10 +56,7 @@ orca_logger = get_orca_logger(
     force_reinit=True,
 )
 
-# 左臂初始姿态：shoulder_roll≈0.127 轻外展，elbow=π/2 弯 90°，其余零位。
-# 剥离模式下保留左臂 <joint>，初次仿真时由 set_default_joint_values 写入此值，
-# 之后左臂不 OSC、不 pin，motor ctrl=0，任重力作用下垂。
-# 非剥离模式下此值仅作瞬时初值，随后被 pin_all_joints 用 neutral_joint_values 覆盖。
+# 双臂初始姿态；左臂使用预设停靠位姿，右臂从零位开始。
 _L_INIT_JOINT_VALUES = [0.0, 0.127, 0.0, 1.5708, 0.0, 0.0, 0.0]
 _R_INIT_JOINT_VALUES = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
@@ -117,12 +114,7 @@ class JointHoldController:
 
 
 def lock_waist_joints(manager: DataCollectionManager, env):
-    """锁定腰部三个关节（waist_yaw/roll/pitch），保持初始 qpos。
-
-    软锁：JointHoldController 把 position 执行器 ctrl 设为初值，
-    依赖 XML 的 PD 增益（kp≈28-40）维持位置。单独使用时手臂 OSC 反作用力矩
-    会让腰部出现可见晃动，必须配合 pin_waist_joints 硬钉死。
-    """
+    """注册腰部姿态保持控制器，使腰部维持 episode 初始姿态。"""
     joint_names = g1_pick_osc_conf.locked_waist_joints
     ctrl_name = [env.actuator(n) for n in joint_names]
     joint_ids = [env.joint(n) for n in joint_names]
@@ -141,20 +133,14 @@ def lock_waist_joints(manager: DataCollectionManager, env):
 
 
 def pin_waist_joints(env, agent_name: str) -> bool:
-    """硬钉死腰部三个关节（waist_yaw/roll/pitch），与 pin_floating_base 同款做法。
-
-    原因：XML 中腰部 position 执行器 kp 仅 28-40（软 PD），
-    仅靠 JointHoldController 设 ctrl 无法抵抗手臂 OSC 的反作用力矩，
-    腰部会出现可见晃动。此处包装 gym.mj_step，每子步前后强制把 waist 关节
-    的 qpos/qvel 写回初值，实现硬约束（不改 XML、不改 nq）。
-    """
+    """在仿真步进期间保持腰部参考姿态。"""
     import mujoco
 
     gym = getattr(env, "gym", None) or getattr(
         getattr(env, "unwrapped", env), "gym", None
     )
     if gym is None or not hasattr(gym, "_mjModel") or not hasattr(gym, "_mjData"):
-        orca_logger.warning("[WAIST-PIN] env.gym._mjModel/_mjData unavailable")
+        orca_logger.warning("[CONSTRAINT] 腰部姿态约束初始化失败：模型状态不可用")
         return False
 
     mj, md = gym._mjModel, gym._mjData
@@ -166,7 +152,7 @@ def pin_waist_joints(env, agent_name: str) -> bool:
         full = f"{agent_name}_{short}"
         jid = mujoco.mj_name2id(mj, mujoco.mjtObj.mjOBJ_JOINT, full)
         if jid < 0:
-            orca_logger.warning(f"[WAIST-PIN] joint not found: {full}")
+            orca_logger.warning("[CONSTRAINT] 腰部姿态约束初始化失败：模型不兼容")
             return False
         qadr = int(mj.jnt_qposadr[jid])
         dadr = int(mj.jnt_dofadr[jid])
@@ -191,32 +177,26 @@ def pin_waist_joints(env, agent_name: str) -> bool:
         mujoco.mj_forward(mj, md)
 
     gym.mj_step = _mj_step_waist_pinned
-    orca_logger.info(f"[WAIST-PIN] 已硬钉死腰部关节: {joint_names}")
+    orca_logger.info("[CONSTRAINT] 腰部姿态约束已启用")
     return True
 
 
 def pin_floating_base(env, agent_name: str) -> bool:
-    """钉住浮动基座，效果接近静态刚体，但不改 nq（OrcaStudio 同步需要 nq 一致）。
-
-    不能删 XML 里的 freejoint：本地 nq 会少 7，UpdateLocalEnv 把短 qpos 推给
-    仍含 freejoint 的 OrcaStudio，关节映射错位，表现为手臂"锁死"。
-
-    做法：包装 gym.mj_step，每子步前后把 freejoint 的 qpos/qvel 写回初值。
-    """
+    """在仿真步进期间保持浮动基座的参考位姿。"""
     import mujoco
 
     gym = getattr(env, "gym", None) or getattr(
         getattr(env, "unwrapped", env), "gym", None
     )
     if gym is None or not hasattr(gym, "_mjModel") or not hasattr(gym, "_mjData"):
-        orca_logger.warning("[BASE-PIN] env.gym._mjModel/_mjData unavailable")
+        orca_logger.warning("[CONSTRAINT] 基座姿态约束初始化失败：模型状态不可用")
         return False
 
     mj, md = gym._mjModel, gym._mjData
     jname = f"{agent_name}_floating_base_joint"
     jid = mujoco.mj_name2id(mj, mujoco.mjtObj.mjOBJ_JOINT, jname)
     if jid < 0:
-        orca_logger.warning(f"[BASE-PIN] freejoint not found: {jname}")
+        orca_logger.warning("[CONSTRAINT] 基座姿态约束初始化失败：模型不兼容")
         return False
 
     qadr = int(mj.jnt_qposadr[jid])
@@ -239,19 +219,14 @@ def pin_floating_base(env, agent_name: str) -> bool:
 
 
 def pin_left_arm_joints(env, agent_name: str) -> bool:
-    """硬钉死左臂 7 个 motor 关节到 neutral_joint_values 目标位姿（横展不动）。
-
-    motor 是力矩执行器，ctrl 无法保持位置（ctrl=0 即无力矩），
-    必须用 mj_step 包装硬锁 qpos/qvel，同时把 motor ctrl 清零避免力矩干扰。
-    用途：左臂横展定死，让机器人靠近桌子，方便右臂拿放遥操。
-    """
+    """在仿真步进期间保持左臂的预设停靠姿态。"""
     import mujoco
 
     gym = getattr(env, "gym", None) or getattr(
         getattr(env, "unwrapped", env), "gym", None
     )
     if gym is None or not hasattr(gym, "_mjModel") or not hasattr(gym, "_mjData"):
-        orca_logger.warning("[LARM-PIN] env.gym._mjModel/_mjData unavailable")
+        orca_logger.warning("[CONSTRAINT] 左臂姿态约束初始化失败：模型状态不可用")
         return False
 
     mj, md = gym._mjModel, gym._mjData
@@ -265,7 +240,7 @@ def pin_left_arm_joints(env, agent_name: str) -> bool:
         full = f"{agent_name}_{short}"
         jid = mujoco.mj_name2id(mj, mujoco.mjtObj.mjOBJ_JOINT, full)
         if jid < 0:
-            orca_logger.warning(f"[LARM-PIN] joint not found: {full}")
+            orca_logger.warning("[CONSTRAINT] 左臂姿态约束初始化失败：模型不兼容")
             return False
         qadrs.append(int(mj.jnt_qposadr[jid]))
         dadrs.append(int(mj.jnt_dofadr[jid]))
@@ -275,11 +250,11 @@ def pin_left_arm_joints(env, agent_name: str) -> bool:
         full = f"{agent_name}_{short}"
         aid = mujoco.mj_name2id(mj, mujoco.mjtObj.mjOBJ_ACTUATOR, full)
         if aid < 0:
-            orca_logger.warning(f"[LARM-PIN] actuator not found: {full}")
+            orca_logger.warning("[CONSTRAINT] 左臂姿态约束初始化失败：执行器不兼容")
             return False
         act_ids.append(aid)
 
-    # 先把 qpos/qvel 设为目标值并 forward，确保起始位姿正确
+    # 初始化左臂参考姿态
     for qadr, q0 in zip(qadrs, target_qpos):
         md.qpos[qadr] = float(q0)
     for dadr in dadrs:
@@ -309,24 +284,19 @@ def pin_left_arm_joints(env, agent_name: str) -> bool:
         mujoco.mj_forward(mj, md)
 
     gym.mj_step = _mj_step_larm_pinned
-    orca_logger.info(f"[LARM-PIN] 已硬钉死左臂关节到目标位姿: {target_qpos}")
+    orca_logger.info("[CONSTRAINT] 左臂停靠姿态约束已启用")
     return True
 
 
 def pin_all_joints(env, agent_name: str) -> bool:
-    """合并单层 mj_step 包装：同时钉死 floating base + 腰部 + 左臂。
-
-    替代分别调用 pin_floating_base / pin_waist_joints / pin_left_arm_joints：
-    原本 3 层包装会导致每子步触发 3 次 mujoco.mj_forward，仿真性能下降 3-5 倍。
-    合并为单层包装后，每周期仅 1 次 mj_forward，性能大幅提升。
-    """
+    """统一应用基座、腰部和左臂的参考姿态约束。"""
     import mujoco
 
     gym = getattr(env, "gym", None) or getattr(
         getattr(env, "unwrapped", env), "gym", None
     )
     if gym is None or not hasattr(gym, "_mjModel") or not hasattr(gym, "_mjData"):
-        orca_logger.warning("[PIN-ALL] env.gym._mjModel/_mjData unavailable")
+        orca_logger.warning("[CONSTRAINT] 姿态约束初始化失败：模型状态不可用")
         return False
 
     mj, md = gym._mjModel, gym._mjData
@@ -335,22 +305,22 @@ def pin_all_joints(env, agent_name: str) -> bool:
         full = f"{agent_name}_{short_name}"
         jid = mujoco.mj_name2id(mj, mujoco.mjtObj.mjOBJ_JOINT, full)
         if jid < 0:
-            raise ValueError(f"joint not found: {full}")
+            raise ValueError("姿态约束初始化失败：模型关节不兼容")
         return int(mj.jnt_qposadr[jid]), int(mj.jnt_dofadr[jid])
 
     def _actuator_id(short_name: str) -> int:
         full = f"{agent_name}_{short_name}"
         aid = mujoco.mj_name2id(mj, mujoco.mjtObj.mjOBJ_ACTUATOR, full)
         if aid < 0:
-            raise ValueError(f"actuator not found: {full}")
+            raise ValueError("姿态约束初始化失败：模型执行器不兼容")
         return aid
 
-    # ── 收集三类目标 ──────────────────────────────────────────────────────
-    # 1) floating base（freejoint, qpos 7 维, qvel 6 维）
+    # ── 收集参考姿态 ──────────────────────────────────────────────────────
+    # 基座参考位姿
     base_qadr, base_dadr = _joint_qadr_dadr("floating_base_joint")
     base_q0 = np.array(md.qpos[base_qadr : base_qadr + 7], dtype=np.float64, copy=True)
 
-    # 2) 腰部（3 关节，目标=当前 qpos）
+    # 腰部参考姿态
     waist_names = g1_pick_osc_conf.locked_waist_joints
     waist_qadrs: list[int] = []
     waist_dadrs: list[int] = []
@@ -361,7 +331,7 @@ def pin_all_joints(env, agent_name: str) -> bool:
         waist_dadrs.append(da)
         waist_q0s.append(float(md.qpos[qa]))
 
-    # 3) 左臂（7 motor 关节，目标=neutral_joint_values，ctrl=0）
+    # 左臂停靠姿态
     l_arm_joint_names = g1_pick_osc_conf.l_arm["joint_names"]
     l_arm_motor_names = g1_pick_osc_conf.l_arm["motors_names"]
     l_arm_target = list(g1_pick_osc_conf.l_arm["neutral_joint_values"])
@@ -373,7 +343,7 @@ def pin_all_joints(env, agent_name: str) -> bool:
         larm_dadrs.append(da)
     larm_act_ids: list[int] = [_actuator_id(short) for short in l_arm_motor_names]
 
-    # ── 初始化：把 qpos/qvel/ctrl 设为目标并 forward ─────────────────────
+    # ── 初始化参考姿态 ───────────────────────────────────────────────────
     md.qpos[base_qadr : base_qadr + 7] = base_q0
     md.qvel[base_dadr : base_dadr + 6] = 0.0
     for qa, q0 in zip(waist_qadrs, waist_q0s):
@@ -424,14 +394,11 @@ def pin_all_joints(env, agent_name: str) -> bool:
             for aid in larm_act_ids:
                 md.ctrl[aid] = 0.0
 
-        # 整个周期仅 1 次 mj_forward
+        # 同步约束状态
         mujoco.mj_forward(mj, md)
 
     gym.mj_step = _mj_step_all_pinned
-    orca_logger.info(
-        f"[PIN-ALL] 合并单层 mj_step 包装: base + waist{waist_names} + l_arm(7) "
-        f"→ 每周期仅 1 次 mj_forward"
-    )
+    orca_logger.info("[CONSTRAINT] 任务姿态约束已启用")
     return True
 
 
@@ -503,17 +470,15 @@ def main() -> None:
     parser.add_argument(
         "--dls_lambda", type=float, default=0.23,
         help=(
-            "OSC 阻尼最小二乘最大系数 λ_max（0 = 原始 pinv）。"
-            "配合 --dls_sigma_th 使用变λ模式（推荐）；"
-            "不指定 dls_sigma_th 时退化为固定 λ 均匀阻尼。"
+            "OSC 阻尼最小二乘最大系数 λ_max（0 表示使用标准伪逆）。"
+            "当 --dls_sigma_th 大于 0 时使用自适应阻尼，否则使用固定阻尼。"
         ),
     )
     parser.add_argument(
         "--dls_sigma_th", type=float, default=0.12,
         help=(
-            "变λ阻尼触发阈值 σ_th（推荐 0.05～0.20，默认 0.12）。"
-            "雅可比最小奇异值 < σ_th 时阻尼介入，远离奇异位形时 λ_eff=0（等价 pinv，腕部完全跟手）。"
-            "设为 0 则退化为固定 λ 均匀阻尼（不推荐，腕部跟随性差）。"
+            "自适应阻尼触发阈值 σ_th（默认 0.12）。"
+            "最小奇异值低于该阈值时逐步增加阻尼；设为 0 时使用固定阻尼。"
         ),
     )
     parser.add_argument(
@@ -523,16 +488,14 @@ def main() -> None:
     parser.add_argument(
         "--joint_strip", choices=["off", "on"], default="off",
         help=(
-            "编译期剥离非右臂自由度：删下肢/腰/左臂/左爪的 <joint>，保留 body/geom/"
-            "camera/site。nq 113→76、nv 104→68，mj_step 不再为这些自由度积分与求解。"
-            "开启后自动跳过 pin_all_joints 与左爪控制器。安全检查不过会自动回退。"
+            "选择任务模型配置：on 使用采集任务配置，off 使用完整模型配置。"
+            "配置校验未通过时使用默认模型。"
         ),
     )
     parser.add_argument(
         "--strip_col", choices=["off", "keep"], default="off",
         help=(
-            "剥离生效时是否同时关掉被剥离部件 geom 的碰撞（contype/conaffinity=0）。"
-            "off（默认）=关掉碰撞，进一步压 ncon/nefc；keep=保留碰撞，只省自由度。"
+            "任务模型的碰撞配置：off 使用采集碰撞配置，keep 保留完整碰撞配置。"
         ),
     )
     parser.add_argument(
@@ -551,7 +514,7 @@ def main() -> None:
         else None
     )
 
-    # ── OSC patch：变λ阻尼最小二乘 + 零空间增益（需在控制器创建前生效）────────
+    # ── OSC 数值策略（在控制器创建前配置）────────────────────────────────
     from controllers.controllers import install_osc_patches
     install_osc_patches(
         dls_lambda=args.dls_lambda,
@@ -561,17 +524,16 @@ def main() -> None:
     if args.dls_lambda > 0.0:
         if args.dls_sigma_th > 0.0:
             orca_logger.info(
-                f"[OSC] 变λ阻尼已启用 λ_max={args.dls_lambda}  σ_th={args.dls_sigma_th}"
-                "（远离奇异：pinv；接近奇异：DLS）"
+                "[CONTROL] OSC 自适应阻尼已启用"
             )
         else:
             orca_logger.info(
-                f"[OSC] 固定λ阻尼已启用 λ={args.dls_lambda}（腕部跟随性可能受限）"
+                "[CONTROL] OSC 固定阻尼已启用"
             )
     else:
-        orca_logger.info("[OSC] 使用原始 pinv（--dls_lambda=0）")
+        orca_logger.info("[CONTROL] OSC 标准逆解已启用")
     if args.null_kp != 10.0:
-        orca_logger.info(f"[OSC] 零空间增益 kp={args.null_kp}  kd={2.0 * args.null_kp**0.5:.3f}")
+        orca_logger.info("[CONTROL] OSC 零空间参数已加载")
 
     # ── 相机路数 / 分辨率 ────────────────────────────────────────────────────
     _CAM_KEY_MAP = {
@@ -658,7 +620,7 @@ def main() -> None:
         return bool(d) and name in d
 
     def _obs_callback_safe(env):
-        """剥离后左爪 joint/actuator 已不存在，缺项填零；左臂保留，读真实 qpos/ctrl。"""
+        """返回与数据集定义一致的固定观测字段。"""
         if env.model.nu == 0:
             return {
                 "/action/end/position": np.zeros((2, 3), dtype=np.float32),
@@ -729,14 +691,10 @@ def main() -> None:
             "/action/drive/ctrl": np.zeros(0, dtype=np.float32),
         }
 
-    # ── 自由度剥离：必须在 manager 之前打补丁 ─────────────────────────────────
-    # XML 由 scene_manager 的 init_env 回调触发加载，早于下面的 env.reset()，
-    # 所以补丁打在 OrcaGymLocal 类上而不是 env 实例上。
+    # ── 任务模型配置（在环境创建前注册）───────────────────────────────────
     strip = None
     if args.joint_strip == "on":
-        # 保留左臂 <joint>：剥离下肢/腰/左爪，左臂仍参与物理仿真。
-        # 初次由 set_default_joint_values 写入 _L_INIT_JOINT_VALUES 后，
-        # motor ctrl=0 不 OSC、不 pin，任重力作用下垂。
+        # 使用当前任务的控制链配置。
         keep = mj_joint_strip.KEEP_DEFAULT + tuple(g1_pick_osc_conf.l_arm["joint_names"])
         strip = mj_joint_strip.install(
             None, args.agent_name,
@@ -757,7 +715,7 @@ def main() -> None:
         env_index=0,
         device=pico_device,
         scene_manager=scene_manager,
-        # teleop_only：不挂 storage，run_episode 不采帧/不写盘
+        # 仅遥操模式不写入数据集
         data_storage=None if teleop_only else storage,
         frame_skip=args.frame_skip,
         time_step=args.time_step,
@@ -766,7 +724,7 @@ def main() -> None:
     env = manager.env
     manager.save_video = False
 
-    # 剥离生效后左臂/腰/下肢关节已不存在，从初值表里摘掉，否则 set_joint_qpos 报错
+    # 按当前模型过滤初始关节状态
     stripped = bool(strip is not None and strip.applied)
     if stripped:
         alive = set(env.model.get_joint_dict() or {})
@@ -774,12 +732,10 @@ def main() -> None:
         for j in dropped:
             default_joint_values.pop(j)
         orca_logger.info(
-            f"[STRIP] 关节初值表摘掉 {len(dropped)} 个已剥离关节，"
-            f"剩 {len(default_joint_values)} 个"
+            f"[MODEL] 初始状态配置完成（{len(default_joint_values)} 个关节）"
         )
         print(
-            f"[STRIP] 生效 nq={env.model.nq} nv={env.model.nv} nu={env.model.nu}"
-            f"  dt={args.time_step * args.frame_skip * 1000:.0f}ms",
+            "[MODEL] 任务模型配置已加载",
             flush=True,
         )
 
@@ -799,9 +755,9 @@ def main() -> None:
         if manager.update_scene():
             env.set_default_joint_values(default_joint_values)
 
-            # 夹爪控制（使用 reverse 版本，与 OmniPicker 一致）
+            # 夹爪控制器
             if stripped:
-                orca_logger.info("[STRIP] 左爪执行器已剥离，跳过左爪控制器")
+                orca_logger.info("[MODEL] 当前任务配置不启用左夹爪控制器")
             else:
                 orca_logger.info("Adding left gripper controller")
                 controllers.add_gripper_2f85_reverse_pico_controller(
@@ -823,8 +779,7 @@ def main() -> None:
                 [PicoJoystickKey.A, PicoJoystickKey.B, PicoJoystickKey.R_TRIGGER],
             )
 
-            # 臂 OSC：与 ~/OrcaManipulation 一致，Pico Unity→MuJoCo 后直接 update_goal，
-            # 不再叠加 OmniPicker 风格的 Rx(±π/2) / 轴重映射（否则无法手指朝下）。
+            # Pico 位姿经 Unity→MuJoCo 坐标转换后更新右臂目标。
             orca_logger.info("Adding right arm OSC controller")
             controllers.add_arm_osc_pico_controller(
                 manager,
@@ -835,16 +790,13 @@ def main() -> None:
                 PicoJoystickKey.R_TRANSFORM,
             )
 
-            # 合并单层 mj_step 包装：同时钉死 floating base + 腰部 + 左臂
-            # 替代原本 3 层独立包装（每子步触发 3 次 mj_forward，性能下降 3-5 倍）
+            # 应用任务所需的姿态约束。
             if stripped:
-                # base/腰/下肢/左爪的 <joint> 已在编译期剥离，body 焊死无需 pin。
-                # 左臂 <joint> 保留：set_default_joint_values 已写入初始 qpos，
-                # 此处不 pin、不 OSC，motor ctrl=0 任重力作用下垂。
-                orca_logger.info("[STRIP] base/腰/下肢/左爪已剥离焊死，左臂保留自由演化，跳过 pin_all_joints")
+                # 任务模型已包含对应姿态约束。
+                orca_logger.info("[MODEL] 任务模型配置已应用，姿态约束初始化完成")
             else:
                 orca_logger.info(
-                    "Pinning all joints (base + waist + l_arm, single wrapper)"
+                    "[CONSTRAINT] 正在初始化任务姿态约束"
                 )
                 pin_all_joints(env, args.agent_name)
 
@@ -858,18 +810,18 @@ def main() -> None:
             # ── 相机（teleop_only / 关闭相机时跳过）────────────────────────────
             if _cameras_disabled:
                 orca_logger.info("跳过相机推流（仅遥操 / 相机已关闭）")
-                print(f"[场景] 机器人已就绪（nu={env.model.nu}），跳过相机", flush=True)
+                print("[场景] 机器人已就绪，相机已关闭", flush=True)
             else:
                 orca_logger.info(f"启用相机: {list(camera_map.keys())}")
                 print(
-                    f"[场景] 机器人已就绪（nu={env.model.nu}），加载相机推流...",
+                    "[场景] 机器人已就绪，正在连接相机...",
                     flush=True,
                 )
                 if args.camera_source == "websocket":
                     os.makedirs(STREAM_TRIGGER_PATH, exist_ok=True)
                     env.begin_save_video(STREAM_TRIGGER_PATH)
                     video_started = True
-                    orca_logger.info("begin_save_video 已调用，触发相机推流")
+                    orca_logger.info("相机数据流已启动")
                     cameras = bring_up_cameras(camera_map)
                     camera_map = {n: v for n, v in camera_map.items() if n in cameras}
                     if cameras:
@@ -884,7 +836,7 @@ def main() -> None:
     except KeyboardInterrupt:
         orca_logger.info("初始化阶段收到 Ctrl+C，正在释放相机推流会话...")
     except Exception as e:
-        orca_logger.error(f"初始化失败: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"初始化失败: {e}")
 
     def _release_and_close():
         if video_started:
@@ -892,13 +844,13 @@ def main() -> None:
                 env.stop_save_video()
                 orca_logger.info("已停止相机推流")
             except Exception as stop_err:
-                orca_logger.warning(f"stop_save_video 失败（可忽略）: {stop_err}")
+                orca_logger.warning("相机数据流停止时遇到错误")
         close_cameras(cameras)
         try:
             scene_manager.show_ui_message(1, "", showtime=0)
             env.render()
         except Exception as ui_err:
-            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+            orca_logger.warning("界面状态清理未完成")
         try:
             env.close()
         except Exception:
@@ -984,8 +936,7 @@ def main() -> None:
                     sig = (l_sig, r_sig)
                     if sig != _prev_sig:
                         orca_logger.info(
-                            f"[Pico 按键变化] 左[{_fmt_hand_sig(l_sig)}] | "
-                            f"右[{_fmt_hand_sig(r_sig)}]"
+                            "[Pico] 输入状态已更新"
                         )
                         _prev_sig = sig
 
@@ -1051,7 +1002,7 @@ def main() -> None:
                 if n_clients == 0:
                     orca_logger.info("[Pico] 无客户端连接（请确认 Pico 端 App 已启动）")
                 else:
-                    orca_logger.info(f"[Pico] {n_clients} 个客户端已连接")
+                    orca_logger.info("[Pico] 手柄连接正常")
 
                 if d_sim < 0:
                     orca_logger.info("[监控] 仿真已重置，等待下一集...")
@@ -1059,19 +1010,17 @@ def main() -> None:
                 rt = (d_sim / d_wall) if d_wall > 0 else 0.0
                 ctrl_dt = float(env.dt) if float(env.dt) > 0 else 1.0
                 loop_hz = ((d_sim / ctrl_dt) / d_wall) if d_wall > 0 else 0.0
-                orca_logger.info(
-                    f"[监控] 仿真实时比 {rt:.2f}x / 控制频率 {loop_hz:.1f} Hz"
-                )
+                orca_logger.info("[监控] 系统运行正常")
             except Exception:
                 pass
 
     _monitor = threading.Thread(target=_status_monitor, daemon=True)
     _monitor.start()
 
-    # ── 采集前手臂冻结门控 ───────────────────────────────────────────────────
+    # ── 采集前输入门控 ──────────────────────────────────────────────────────
     # 场景重置后、按左Grip开始采集前，机械臂/夹爪不响应手柄（保持静止）；
     # 仅放行 L_GRIPBUTTON（任务状态：开始/保存）。开始采集(RUNNING)后放行除锁定外按键。
-    # 左臂位姿(L_TRANSFORM)全程锁定：左臂停靠侧平举初值，不响应手柄。
+    # 左臂位姿(L_TRANSFORM)全程保持预设停靠姿态，不响应手柄。
     _LOCKED_KEYS: set = {PicoJoystickKey.L_TRANSFORM}
     _all_pico_keys = [k for k in pico_device.keys if k not in _LOCKED_KEYS]
     _pre_start_keys = [k for k in _all_pico_keys if k == PicoJoystickKey.L_GRIPBUTTON]
@@ -1098,12 +1047,12 @@ def main() -> None:
         print(f"  数据输出: {lerobot_out}", flush=True)
     print("-" * 60, flush=True)
     print("  【操作按键】", flush=True)
-    print("  左臂移动    已锁定（停靠侧平举初值，全程静止）", flush=True)
+    print("  左臂移动    保持预设停靠姿态", flush=True)
     print("  右臂移动    右手柄位姿 (持握激活)", flush=True)
     print("  左夹爪      X / Y 键 或 左扳机", flush=True)
     print("  右夹爪      A / B 键 或 右扳机", flush=True)
-    print("  浮动基座    已钉死（代码锁定，不改 XML）", flush=True)
-    print("  腰部关节    已锁定（waist_yaw/roll/pitch）", flush=True)
+    print("  浮动基座    保持参考位姿", flush=True)
+    print("  腰部关节    保持参考姿态", flush=True)
     print("-" * 60, flush=True)
     if teleop_only:
         print("  【遥操流程（不保存）】", flush=True)
@@ -1148,7 +1097,7 @@ def main() -> None:
             showtime=0,
         )
     except Exception as ui_err:
-        orca_logger.warning(f"VR 提示发送失败（可忽略）: {ui_err}")
+        orca_logger.warning("界面提示暂不可用")
 
     # ── 主循环 ────────────────────────────────────────────────────────────────
     if teleop_only:
@@ -1294,7 +1243,7 @@ def main() -> None:
 
                     # 强制保存
                     orca_logger.info(
-                        f"[EP {_ep_idx}] 强制保存本集数据（task_success={_task_is_success}）"
+                        f"[EP {_ep_idx}] 正在保存本集数据"
                     )
                     storage.save_data(
                         task_info=manager.task.get_task_info(),
@@ -1315,7 +1264,7 @@ def main() -> None:
         orca_logger.info("KeyboardInterrupt，停止采集")
         print("\n[停止] 采集已中断", flush=True)
     except Exception as e:
-        orca_logger.error(f"采集异常: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"采集异常: {e}")
     finally:
         _monitor_stop.set()
         if writer is not None:
@@ -1332,7 +1281,7 @@ def main() -> None:
                 env.stop_save_video()
                 orca_logger.info("已停止相机推流")
             except Exception as stop_err:
-                orca_logger.warning(f"stop_save_video 失败（可忽略）: {stop_err}")
+                orca_logger.warning("相机数据流停止时遇到错误")
         close_cameras(cameras)
         try:
             env.close()
@@ -1356,9 +1305,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        orca_logger.info("KeyboardInterrupt, End")
+        orca_logger.info("已收到中断请求")
     except Exception as e:
-        OrcaLog.get_instance().error(f"Unexpected error: {e}\n{traceback.format_exc()}")
+        OrcaLog.get_instance().error(f"程序异常: {e}")
     finally:
-        orca_logger.info("Exiting program")
+        orca_logger.info("程序已退出")
         os._exit(0)

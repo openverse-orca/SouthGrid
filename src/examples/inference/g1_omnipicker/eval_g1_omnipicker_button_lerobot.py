@@ -13,15 +13,14 @@ import cv2
 import numpy as np
 from yaml import Loader, load
 
-# 推理使用自建控制循环；首次 Ctrl+C 请求正常中断和清理，
-# 第二次 Ctrl+C 用于清理过程卡住时强制退出。
+# 首次中断请求正常结束；再次中断会立即退出。
 _interrupt = threading.Event()
 
 
 def _install_interrupt_handlers() -> None:
     def _handler(signum, frame):
         if _interrupt.is_set():
-            print("\n[强制退出] 再次收到中断信号", flush=True)
+            print("\n[退出] 再次收到中断信号，立即退出", flush=True)
             os._exit(130)
         _interrupt.set()
         print("\n[退出] Ctrl+C 收到，正在结束当前评估...", flush=True)
@@ -58,8 +57,8 @@ base_dir = os.path.dirname(os.path.realpath(__file__))
 log_dir = os.path.join(base_dir, "logs")
 
 orca_logger = get_orca_logger(
-    name="EvalG1Lerobot",
-    log_file="eval_g1_omnipicker_lerobot.log",
+    name="EvalG1OmnipickerButton",
+    log_file="eval_g1_omnipicker_button_lerobot.log",
     max_bytes=10 * 1024 * 1024,
     backup_count=5,
     console_level="INFO",
@@ -198,11 +197,11 @@ def action_dict_for_apply(action_dict: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 相机观测构建器 & 策略运行器（与青龙版本相同，策略通信协议无差异）
+# 相机观测构建器与策略运行器
 # ---------------------------------------------------------------------------
 
 class CameraObservationBuilder:
-    """从 WebSocket 内存流取图，与采集时 capture_frame_images 逻辑完全一致。"""
+    """从已配置的相机数据流构建策略图像观测。"""
 
     def __init__(
         self,
@@ -354,7 +353,7 @@ def main():
     parser.add_argument(
         "--enable_wrist_l",
         action="store_true",
-        help="启用左腕相机 camera_wrist_l_color:7070（旧三路策略需要；默认关闭，仅头+右腕）",
+        help="可选启用左腕相机 camera_wrist_l_color:7070（默认关闭）",
     )
     args = parser.parse_args()
 
@@ -401,15 +400,12 @@ def main():
     manager.add_controller(r_grip)
 
     camera_map = omnipicker_camera_map(enable_wrist_l=args.enable_wrist_l)
-    # camera_name_map：env 相机传感器名 → 策略观测键名（与采集数据集一致）
+    # 环境相机传感器名到策略观测键的映射
     camera_name_map: dict[str, str] = {
         env_name: lerobot_key
         for env_name, (lerobot_key, _port) in camera_map.items()
     }
-    orca_logger.info(
-        f"推理相机: {list(camera_name_map.values())}"
-        + ("（含左腕 7070）" if args.enable_wrist_l else "（默认头+右腕）")
-    )
+    orca_logger.info("推理相机配置已加载")
 
     _need_cameras = (not args.no_images) or (not args.no_preview)
     _shared_cameras: dict = {}
@@ -437,7 +433,7 @@ def main():
             time.sleep(0.1)
 
             if not manager.update_scene():
-                orca_logger.error("update_scene 失败，退出")
+                orca_logger.error("场景更新失败，退出")
                 return
 
             manager.set_init_ctrl()
@@ -483,7 +479,9 @@ def main():
                             _preview_ready = True
                             orca_logger.info("预览窗口已创建，按 q 提前结束当前 episode")
                     except Exception as _e:
-                        orca_logger.warning(f"相机启动失败，策略将使用全黑图: {_e}")
+                        orca_logger.warning(
+                            "相机启动失败，已启用占位图像；本次推理结果不可用于评估"
+                        )
                         _shared_cameras = {}
 
                 policy_runner = OpenPIPolicyRunner(
@@ -496,7 +494,7 @@ def main():
                     use_images=not args.no_images,
                 )
                 orca_logger.info(f"已连接策略服务器: {args.host}:{args.port}")
-                orca_logger.info(f"策略元数据: {policy_runner.metadata}")
+                orca_logger.info("策略服务已就绪")
                 orca_logger.info(f"Prompt: {args.prompt}")
 
             if not args.no_images:
@@ -510,7 +508,7 @@ def main():
             truncated = False
 
             while step < args.max_steps and not truncated and not _interrupt.is_set():
-                # state 由本体感知构造，与采集数据集 observation.state 一致。
+                # 按模型输入 schema 构造机器人状态观测。
                 state = storage.build_state(storage.obs_callback(env))
                 action_chunk = policy_runner.infer_action_chunk(state)
 
@@ -565,26 +563,13 @@ def main():
                                 _TPROF["ctrl"] + _TPROF["step"]
                                 + _TPROF["render"] + _TPROF["preview"]
                             )
-                            orca_logger.info(
-                                f"[PROF] n={_n}  "
-                                f"ctrl={_TPROF['ctrl']/_n*1000:.1f}ms  "
-                                f"env.step={_TPROF['step']/_n*1000:.1f}ms  "
-                                f"render={_TPROF['render']/_n*1000:.1f}ms  "
-                                f"preview={_TPROF['preview']/_n*1000:.1f}ms  "
-                                f"| total≈{_total/_n*1000:.1f}ms"
-                            )
+                            orca_logger.info("[运行] 推理控制循环正常")
 
                         _lp = device.l_pos_b if device.l_pos_b is not None else np.zeros(3)
                         _rp = device.r_pos_b if device.r_pos_b is not None else np.zeros(3)
                         _lg = device.l_grip_ctrl.tolist() if device.l_grip_ctrl is not None else [0, 0]
                         _rg = device.r_grip_ctrl.tolist() if device.r_grip_ctrl is not None else [0, 0]
-                        orca_logger.info(
-                            f"step={step:04d}/{args.max_steps}  "
-                            f"cmd_L=[{_lp[0]:+.3f},{_lp[1]:+.3f},{_lp[2]:+.3f}]  "
-                            f"cmd_R=[{_rp[0]:+.3f},{_rp[1]:+.3f},{_rp[2]:+.3f}]  "
-                            f"grip_L=[{_lg[0]:.3f},{_lg[1]:.3f}]  "
-                            f"grip_R=[{_rg[0]:.3f},{_rg[1]:.3f}]"
-                        )
+                        orca_logger.info(f"[运行] 推理进度 {step}/{args.max_steps}")
 
                         step += 1
                         if truncated:
@@ -600,8 +585,8 @@ def main():
             completed = not truncated
             episode_results.append(completed)
             orca_logger.info(
-                f"[{'done' if completed else 'stopped'}] "
-                f"Episode {episode_index + 1} finished: steps={step}  truncated={truncated}"
+                f"第 {episode_index + 1} 集"
+                + ("推理完成" if completed else "推理已中断")
             )
             if completed:
                 scene_manager.show_ui_message(1, "推理完成", "0x00ff00", showtime=0)
@@ -641,7 +626,7 @@ def main():
             scene_manager.show_ui_message(1, "", showtime=0)
             env.render()
         except Exception as ui_err:
-            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+            orca_logger.warning("界面状态清理未完成")
         try:
             env.close()
         except Exception:
@@ -652,9 +637,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        orca_logger.info("KeyboardInterrupt, End")
+        orca_logger.info("已收到中断请求")
     except Exception as e:
-        OrcaLog.get_instance().error(f"Unexpected error: {e}\n{traceback.format_exc()}")
+        OrcaLog.get_instance().error(f"推理异常: {e}")
     finally:
-        orca_logger.info("Exiting program")
+        orca_logger.info("程序已退出")
         os._exit(0)

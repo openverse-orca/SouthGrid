@@ -13,16 +13,15 @@ import cv2
 import numpy as np
 from yaml import Loader, load
 
-# DataCollectionManager 会覆盖 SIGINT（只置 _shutdown_requested）；
-# eval 自建控制循环，必须自行处理 Ctrl+C。
+# 推理控制循环使用独立的中断状态。
 _interrupt = threading.Event()
 
 
 def _install_interrupt_handlers() -> None:
     def _handler(signum, frame):
         if _interrupt.is_set():
-            # 第二次 Ctrl+C：强制退出（避免清理卡住）
-            print("\n[强制退出] 再次收到中断信号", flush=True)
+            # 再次中断时立即退出
+            print("\n[退出] 再次收到中断信号，立即退出", flush=True)
             os._exit(130)
         _interrupt.set()
         print("\n[退出] Ctrl+C 收到，正在结束当前评估...", flush=True)
@@ -121,17 +120,17 @@ class EEFDevice(AbstractDevice):
         self.r_quat_b = None if r_quat_b is None else np.asarray(r_quat_b, dtype=np.float32)
         self.l_grip_ctrl = None if l_grip_ctrl is None else np.asarray(l_grip_ctrl, dtype=np.float32).reshape(2)
         self.r_grip_ctrl = None if r_grip_ctrl is None else np.asarray(r_grip_ctrl, dtype=np.float32).reshape(2)
-        # 锁定目标：set_left_hold 后写入，策略无法覆盖
+        # 左臂保持目标
         self._l_hold_pos = None
         self._l_hold_quat = None
         self._l_hold_grip = None
-        # 近桌外环积分门控（与回放一致：z <= z_below 时开，上升沿清零）
+        # 按末端高度启用积分
         self.grasp_integral = bool(grasp_integral)
         self.grasp_integral_z_below = float(grasp_integral_z_below)
         self._prev_grasp_integral_active = False
 
     def set_left_hold(self, l_pos_b, l_quat_b, l_grip_ctrl=None):
-        """记录左臂锁定位姿。"""
+        """设置左臂保持位姿。"""
         self._l_hold_pos = np.asarray(l_pos_b, dtype=np.float32).copy()
         self._l_hold_quat = np.asarray(l_quat_b, dtype=np.float32).copy()
         if l_grip_ctrl is not None:
@@ -151,7 +150,7 @@ class EEFDevice(AbstractDevice):
         r_grip_ctrl=None,
     ):
         if self.lock_left_arm:
-            # 左臂忽略策略，保持 hold
+            # 左臂使用预设保持目标
             if self._l_hold_pos is not None:
                 self.l_pos_b = self._l_hold_pos.copy()
                 self.l_quat_b = self._l_hold_quat.copy()
@@ -172,14 +171,14 @@ class EEFDevice(AbstractDevice):
             self.r_grip_ctrl = np.asarray(r_grip_ctrl, dtype=np.float32).reshape(2)
 
     def reset_integral_state(self) -> None:
-        """每集开始时重置积分门控状态（与回放对齐）。"""
+        """每集开始时重置积分状态。"""
         self._prev_grasp_integral_active = False
         if self.r_arm is not None and self.grasp_integral:
             self.r_arm.enable_integral(False)
             self.r_arm.reset_integral()
 
     def _apply_grasp_integral_gate(self, r_pos: np.ndarray) -> None:
-        """近桌高度开启外环积分；上升沿清零，离开近桌后关闭并清零（与回放一致）。"""
+        """按末端高度启用积分，并在状态切换时重置积分项。"""
         if not self.grasp_integral:
             if self._prev_grasp_integral_active:
                 self.r_arm.enable_integral(False)
@@ -189,15 +188,10 @@ class EEFDevice(AbstractDevice):
         active = float(r_pos[2]) <= self.grasp_integral_z_below
         if active and not self._prev_grasp_integral_active:
             self.r_arm.reset_integral()
-            orca_logger.info(
-                f"[推理积分] 进入近桌段 raw_z={float(r_pos[2]):.4f}，积分偏置已清零"
-            )
+            orca_logger.info("[CONTROL] 末端积分已启用")
         if (not active) and self._prev_grasp_integral_active:
             bias = self.r_arm.get_integral_bias_b()
-            orca_logger.info(
-                f"[推理积分] 离开近桌段，最终偏置={bias.round(4).tolist()} "
-                f"(z={bias[2] * 1000:+.1f}mm)"
-            )
+            orca_logger.info("[CONTROL] 末端积分已重置")
             self.r_arm.reset_integral()
         self.r_arm.enable_integral(active)
         self._prev_grasp_integral_active = active
@@ -268,11 +262,11 @@ def action_dict_for_apply(action_dict: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 相机观测构建器 & 策略运行器（与青龙版本相同，策略通信协议无差异）
+# 相机观测构建器与策略运行器
 # ---------------------------------------------------------------------------
 
 class CameraObservationBuilder:
-    """从 WebSocket 内存流取图，与采集时 capture_frame_images 逻辑完全一致。"""
+    """从已配置的相机数据流构建策略图像观测。"""
 
     def __init__(
         self,
@@ -368,7 +362,7 @@ def warmup_camera_capture(manager, env, device, warmup_action: dict, warmup_step
 # ---------------------------------------------------------------------------
 
 def build_default_joint_values() -> dict:
-    """左臂用数采锁定角 _L_INIT_JOINT_VALUES；右臂用 conf 中性位。"""
+    """构建双臂初始关节状态。"""
     d = {}
     for jn, v in zip(agent_conf.l_arm["joint_names"], _L_INIT_JOINT_VALUES):
         d[jn] = v
@@ -420,25 +414,25 @@ def main():
                         help="每个推理 action 重复执行的控制步数（增大可给 OSC 更多收敛时间）")
     parser.add_argument(
         "--kp", type=float, default=150.0,
-        help="OSC 阻抗刚度 kp（默认 150，与数采一致；范围约 1~300）",
+        help="OSC 阻抗刚度 kp（默认 150；有效范围 1~300）",
     )
     parser.add_argument(
         "--grasp_integral",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="开启近桌外环积分，减小推理末端相对策略目标的稳态误差（默认关）",
+        help="在指定高度范围内启用末端积分（默认关闭）",
     )
     parser.add_argument(
         "--grasp_integral_ki",
         type=float,
         default=0.2,
-        help="推理外环积分增益（逐控制步，默认0.2）",
+        help="末端积分增益（每控制步更新，默认 0.2）",
     )
     parser.add_argument(
         "--grasp_integral_max",
         type=float,
         default=0.010,
-        help="推理外环积分偏置限幅（米，默认0.010）",
+        help="末端积分偏置限幅（米，默认 0.010）",
     )
     parser.add_argument(
         "--grasp_integral_axes",
@@ -450,13 +444,13 @@ def main():
         "--grasp_integral_log_every",
         type=int,
         default=10,
-        help="积分日志节流：每 N 控制步打印一次（默认10；0=关闭）",
+        help="每 N 个控制步输出一次积分状态（默认 10；0 表示关闭）",
     )
     parser.add_argument(
         "--grasp_integral_z_below",
         type=float,
         default=0.25,
-        help="仅当策略右臂目标 z<=该值(m) 时启用外环积分（默认0.25）",
+        help="仅当右臂目标 z 不高于该值时启用积分，单位米（默认 0.25）",
     )
     parser.add_argument("--episodes", type=int, default=1, help="评估集数")
     parser.add_argument("--camera_warmup_steps", type=int, default=10,
@@ -470,7 +464,7 @@ def main():
     parser.add_argument(
         "--enable_wrist_l",
         action="store_true",
-        help="启用左腕相机 camera_wrist_l_color:7070（旧三路策略需要；默认关闭，仅头+右腕）",
+        help="可选启用左腕相机 camera_wrist_l_color:7070（默认关闭）",
     )
     args = parser.parse_args()
 
@@ -506,13 +500,11 @@ def main():
     manager.set_disable_actuator_group([agent_conf.positions_group])
     manager.set_task(EmptyTask(env))
     manager.mode = DataCollectionManager.DataCollectionMode.INFERENCE
-    # 必须在 DataCollectionManager 构造之后重新注册，否则 Ctrl+C 无效
+    # 环境管理器初始化后安装推理控制循环的信号处理器
     _install_interrupt_handlers()
 
     default_joint_values = build_default_joint_values()
-    orca_logger.info(
-        f"左臂初始化关节角(与数采一致): {_L_INIT_JOINT_VALUES}；推理中锁定左臂 OSC 目标"
-    )
+    orca_logger.info("机器人初始姿态已加载，左臂保持模式已启用")
 
     l_arm  = create_arm(env, agent_conf.l_arm)
     r_arm  = create_arm(env, agent_conf.r_arm)
@@ -520,7 +512,7 @@ def main():
     for _arm in (l_arm, r_arm):
         _arm.controller.kp = np.ones(6, dtype=np.float64) * kp_val
         _arm.controller.kd = 2.0 * np.sqrt(_arm.controller.kp)
-    orca_logger.info(f"OSC 阻抗刚度 kp 设为 {kp_val}（kd=2√kp 临界阻尼）")
+    orca_logger.info("[CONTROL] OSC 阻抗参数已加载")
 
     if args.grasp_integral:
         r_arm.configure_integral(
@@ -529,11 +521,7 @@ def main():
             axes=str(args.grasp_integral_axes),
             log_every=int(args.grasp_integral_log_every),
         )
-        orca_logger.info(
-            f"推理外环积分: ON  ki={args.grasp_integral_ki} "
-            f"max={args.grasp_integral_max}m axes={args.grasp_integral_axes} "
-            f"z_below={args.grasp_integral_z_below}m"
-        )
+        orca_logger.info("[CONTROL] 末端积分配置已启用")
     l_grip = create_gripper(env, agent_conf.gripper_l)
     r_grip = create_gripper(env, agent_conf.gripper_r)
     manager.add_controller(l_arm)
@@ -542,15 +530,12 @@ def main():
     manager.add_controller(r_grip)
 
     camera_map = omnipicker_camera_map(enable_wrist_l=args.enable_wrist_l)
-    # camera_name_map：env 相机传感器名 → 策略观测键名（与采集数据集一致）
+    # 环境相机传感器名到策略观测键的映射
     camera_name_map: dict[str, str] = {
         env_name: lerobot_key
         for env_name, (lerobot_key, _port) in camera_map.items()
     }
-    orca_logger.info(
-        f"推理相机: {list(camera_name_map.values())}"
-        + ("（含左腕 7070）" if args.enable_wrist_l else "（默认头+右腕）")
-    )
+    orca_logger.info("推理相机配置已加载")
 
     _need_cameras = (not args.no_images) or (not args.no_preview)
     _shared_cameras: dict = {}
@@ -578,10 +563,10 @@ def main():
             time.sleep(0.1)
 
             if not manager.update_scene():
-                orca_logger.error("update_scene 失败，退出")
+                orca_logger.error("场景更新失败，退出")
                 return
 
-            # 与数采一致：左臂直接设到 _L_INIT（水平伸直），右臂中性位
+            # 应用双臂初始关节状态
             env.set_default_joint_values(default_joint_values)
             env.mj_forward()
             manager.set_init_ctrl()
@@ -616,23 +601,21 @@ def main():
             else:
                 device.set_target(**_init_action_apply)
 
-            # 每集开始重置积分门控状态
+            # 每集开始重置积分状态
             device.reset_integral_state()
 
-            # 锁定左臂：以初始化后的末端位姿为 hold，忽略后续策略左臂输出。
+            # 使用初始化后的末端位姿作为左臂保持目标。
             device.set_left_hold(
                 _init_action_apply["l_pos_b"],
                 _init_action_apply["l_quat_b"],
                 _init_action_apply.get("l_grip_ctrl"),
             )
-            # 用 OSC 在锁定位短暂驻留，避免一上策略就把左臂拉走
+            # 在推理前执行保持控制器预运行
             for _ in range(10):
                 action = manager.run_controllers()
                 env.step(action)
                 env.render()
-            orca_logger.info(
-                f"左臂已锁定 hold_pos={np.asarray(device._l_hold_pos).round(4).tolist()}"
-            )
+            orca_logger.info("左臂保持目标已初始化")
 
 
             # 首集：场景就绪后启动相机内存流并连接策略服务器
@@ -656,7 +639,9 @@ def main():
                             _preview_ready = True
                             orca_logger.info("预览窗口已创建，按 q 提前结束当前 episode")
                     except Exception as _e:
-                        orca_logger.warning(f"相机启动失败，策略将使用全黑图: {_e}")
+                        orca_logger.warning(
+                            "相机启动失败，已启用占位图像；本次推理结果不可用于评估"
+                        )
                         _shared_cameras = {}
 
                 policy_runner = OpenPIPolicyRunner(
@@ -669,7 +654,7 @@ def main():
                     use_images=not args.no_images,
                 )
                 orca_logger.info(f"已连接策略服务器: {args.host}:{args.port}")
-                orca_logger.info(f"策略元数据: {policy_runner.metadata}")
+                orca_logger.info("策略服务已就绪")
                 orca_logger.info(f"Prompt: {args.prompt}")
 
             if not args.no_images:
@@ -683,7 +668,7 @@ def main():
             truncated = False
 
             while step < args.max_steps and not truncated and not _interrupt.is_set():
-                # state 由本体感知构造，与采集数据集 observation.state 一致。
+                # 按模型输入 schema 构造机器人状态观测。
                 state = storage.build_state(storage.obs_callback(env))
                 action_chunk = policy_runner.infer_action_chunk(state)
 
@@ -738,26 +723,13 @@ def main():
                                 _TPROF["ctrl"] + _TPROF["step"]
                                 + _TPROF["render"] + _TPROF["preview"]
                             )
-                            orca_logger.info(
-                                f"[PROF] n={_n}  "
-                                f"ctrl={_TPROF['ctrl']/_n*1000:.1f}ms  "
-                                f"env.step={_TPROF['step']/_n*1000:.1f}ms  "
-                                f"render={_TPROF['render']/_n*1000:.1f}ms  "
-                                f"preview={_TPROF['preview']/_n*1000:.1f}ms  "
-                                f"| total≈{_total/_n*1000:.1f}ms"
-                            )
+                            orca_logger.info("[运行] 推理控制循环正常")
 
                         _lp = device.l_pos_b if device.l_pos_b is not None else np.zeros(3)
                         _rp = device.r_pos_b if device.r_pos_b is not None else np.zeros(3)
                         _lg = device.l_grip_ctrl.tolist() if device.l_grip_ctrl is not None else [0, 0]
                         _rg = device.r_grip_ctrl.tolist() if device.r_grip_ctrl is not None else [0, 0]
-                        orca_logger.info(
-                            f"step={step:04d}/{args.max_steps}  "
-                            f"cmd_L=[{_lp[0]:+.3f},{_lp[1]:+.3f},{_lp[2]:+.3f}]  "
-                            f"cmd_R=[{_rp[0]:+.3f},{_rp[1]:+.3f},{_rp[2]:+.3f}]  "
-                            f"grip_L=[{_lg[0]:.3f},{_lg[1]:.3f}]  "
-                            f"grip_R=[{_rg[0]:.3f},{_rg[1]:.3f}]"
-                        )
+                        orca_logger.info(f"[运行] 推理进度 {step}/{args.max_steps}")
 
                         step += 1
                         if truncated:
@@ -773,8 +745,8 @@ def main():
             completed = not truncated
             episode_results.append(completed)
             orca_logger.info(
-                f"[{'done' if completed else 'stopped'}] "
-                f"Episode {episode_index + 1} finished: steps={step}  truncated={truncated}"
+                f"第 {episode_index + 1} 集"
+                + ("推理完成" if completed else "推理已中断")
             )
             if completed:
                 scene_manager.show_ui_message(1, "推理完成", "0x00ff00", showtime=0)
@@ -814,7 +786,7 @@ def main():
             scene_manager.show_ui_message(1, "", showtime=0)
             env.render()
         except Exception as ui_err:
-            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+            orca_logger.warning("界面状态清理未完成")
         try:
             env.close()
         except Exception:
@@ -825,9 +797,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        orca_logger.info("KeyboardInterrupt, End")
+        orca_logger.info("已收到中断请求")
     except Exception as e:
-        OrcaLog.get_instance().error(f"Unexpected error: {e}\n{traceback.format_exc()}")
+        OrcaLog.get_instance().error(f"推理异常: {e}")
     finally:
-        orca_logger.info("Exiting program")
+        orca_logger.info("程序已退出")
         os._exit(0)

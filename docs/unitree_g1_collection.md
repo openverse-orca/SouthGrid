@@ -119,7 +119,7 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
 
 `OMP_NUM_THREADS=1` 用于限制底层数值库的线程数，减少仿真、相机采集和视频编码之间的 CPU 争用。
 
-当前脚本的默认 `--joint_strip` 为 `off`，与上面的推荐运行方式不同。因此示例中的 `--joint_strip on` 不应省略。
+当前脚本的默认任务模型配置为 `--joint_strip off`，与上面的采集示例不同。因此示例中的 `--joint_strip on` 不应省略。
 
 | 参数 | 含义 | 脚本默认值 | 示例值或使用建议 |
 |------|------|------------|------------------|
@@ -135,15 +135,15 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_tele_lerobot.py \
 | `--cam_resolution` | 数据帧目标分辨率，高×宽 | `480x640` | 需要缩放时修改 |
 | `--camera_source` | `websocket` 流式采集或 `mp4` 集末提取 | `websocket` | 推荐 `websocket` |
 | `--dls_lambda` | OSC 阻尼最小二乘最大系数 | `0.23` | 示例使用 `0.2` |
-| `--joint_strip` | 是否剥离与任务无关的自由度 | `off` | 示例必须显式使用 `on` |
-| `--strip_col` | 剥离时是否保留相关碰撞 | `off` | `off` 表示关闭被剥离部件的碰撞 |
+| `--joint_strip` | 任务模型配置 | `off` | 采集示例必须显式使用 `on` |
+| `--strip_col` | 任务模型的碰撞配置 | `off` | `off` 使用采集碰撞配置，`keep` 保留完整配置 |
 | `--time_step` | MuJoCo 物理步长，单位秒 | `0.001` | 与回放保持一致 |
 | `--frame_skip` | 每个控制周期的物理子步数 | `5` | 控制周期为 5 ms |
 | `--orcagym_addr` | OrcaGym 服务地址 | `localhost:50051` | 服务地址变化时修改 |
 
 ### 按键映射
 
-本文示例启用了 `--joint_strip on`，主要控制右臂和右夹爪。左臂不跟随 Pico，左夹爪也不会参与该采集链路。
+本文示例启用了 `--joint_strip on` 任务模型配置，采集操作集中在右臂和右夹爪；左侧控制不响应 Pico 输入。
 
 | 功能 | 操作 | 说明 |
 |------|------|------|
@@ -309,7 +309,7 @@ OMP_NUM_THREADS=1 python g1_pick_osc_replay_lerobot.py \
 
 ## OSC 与物理参数
 
-遥操作、脚本化采集和回放应尽量使用一致的机器人名称、自由度配置和物理步长。
+遥操作、脚本化采集和回放应使用一致的机器人名称、任务模型配置和物理步长。
 
 | 参数 | 含义 | 推荐或示例值 |
 |------|------|--------------|
@@ -317,8 +317,8 @@ OMP_NUM_THREADS=1 python g1_pick_osc_replay_lerobot.py \
 | `--dls_sigma_th` | 最小奇异值触发阈值；0 表示固定阻尼 | `0.12` |
 | `--null_kp` | 零空间关节复原增益 | `10` |
 | `--kp` | 脚本化/回放的 OSC 阻抗刚度覆盖值 | `0` 表示沿用控制器配置 |
-| `--joint_strip` | 编译期精简与任务无关的自由度 | `on` |
-| `--strip_col` | 是否保留被精简部件的碰撞 | `off` 表示关闭这些碰撞 |
+| `--joint_strip` | 任务模型配置 | `on` |
+| `--strip_col` | 任务模型的碰撞配置 | `off` 使用采集配置，`keep` 保留完整配置 |
 | `--time_step` | MuJoCo 单个物理步长 | `0.001` 秒 |
 | `--frame_skip` | 每个控制周期执行的物理步数 | `5` |
 
@@ -356,7 +356,7 @@ data_collection:
 | `src/dataStorage/lerobot_camera.py` | 相机名称、端口和 WebSocket 连接实现 |
 | `src/dataStorage/g1_pick_osc_data_storage.py` | Unitree G1 的 18 维 state/action 定义 |
 
-`mj_joint_strip.py` 是上述入口内部使用的模型精简实现，不属于常规的独立采集入口。
+入口会根据命令行参数加载相应的任务模型配置，无需单独运行辅助模块。
 
 ---
 

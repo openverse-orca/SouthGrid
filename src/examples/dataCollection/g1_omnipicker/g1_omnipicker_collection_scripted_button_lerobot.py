@@ -75,7 +75,7 @@ _COLOR_ORDER = ["red", "green", "yellow", "blue"]
 
 
 # ---------------------------------------------------------------------------
-# G1ScriptedTrajectoryDevice（复用 scripted_lerobot 版本，G1 双执行器夹爪）
+# G1 双臂与双夹爪轨迹设备
 # ---------------------------------------------------------------------------
 
 class G1ScriptedTrajectoryDevice(AbstractDevice):
@@ -336,7 +336,7 @@ def main() -> None:
         "--clock",
         choices=("sim", "wall"),
         default="wall",
-        help="采帧时钟源。wall（默认）=墙钟，与 tele 一致；sim=仿真时间。",
+        help="采帧时钟源：wall（默认）使用系统时钟，sim 使用仿真时间。",
     )
     args = parser.parse_args()
 
@@ -448,7 +448,7 @@ def main() -> None:
     time.sleep(0.1)
 
     if not manager.update_scene():
-        orca_logger.error("首次 update_scene 失败，退出")
+        orca_logger.error("场景初始化失败，退出")
         env.close()
         return
 
@@ -494,7 +494,7 @@ def main() -> None:
     try:
         os.makedirs(STREAM_TRIGGER_PATH, exist_ok=True)
         env.begin_save_video(STREAM_TRIGGER_PATH)
-        orca_logger.info("begin_save_video 已调用，触发相机推流")
+        orca_logger.info("相机数据流已启动")
         cameras = bring_up_cameras(camera_map)
         camera_map = {n: v for n, v in camera_map.items() if n in cameras}
         if cameras:
@@ -557,9 +557,7 @@ def main() -> None:
                 orca_logger.info(
                     f"\n=== Episode {ep_idx + 1}/{total_episodes} | {task_str} ==="
                 )
-                orca_logger.info(
-                    f"    接触目标: {r_target}  quat: {r_quat}"
-                )
+                orca_logger.info("    按钮目标已加载")
                 print(
                     f"\n>>> 正在采集第 {ep_idx + 1}/{total_episodes} 条 | 语言指令: {task_str}",
                     flush=True,
@@ -579,7 +577,7 @@ def main() -> None:
                 time.sleep(0.05)
 
                 if not manager.update_scene():
-                    orca_logger.info("update_scene 失败，停止")
+                    orca_logger.info("场景更新失败，停止采集")
                     break
 
                 env.set_default_joint_values(default_joint_values)
@@ -628,7 +626,7 @@ def main() -> None:
         orca_logger.info("KeyboardInterrupt，停止采集")
         print("\n[停止] 采集已中断", flush=True)
     except Exception as e:
-        orca_logger.error(f"采集异常: {e}\n{traceback.format_exc()}")
+        orca_logger.error(f"采集异常: {e}")
     finally:
         try:
             env.stop_save_video()
@@ -645,7 +643,7 @@ def main() -> None:
             scene_manager.show_ui_message(1, "", showtime=0)
             env.render()
         except Exception as ui_err:
-            orca_logger.warning(f"清理 HUD 提示失败（可忽略）: {ui_err}")
+            orca_logger.warning("界面状态清理未完成")
         env.close()
 
 
@@ -653,9 +651,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        orca_logger.info("KeyboardInterrupt, End")
+        orca_logger.info("已收到中断请求")
     except Exception as e:
-        OrcaLog.get_instance().error(f"Unexpected error: {e}\n{traceback.format_exc()}")
+        OrcaLog.get_instance().error(f"程序异常: {e}")
     finally:
-        orca_logger.info("Exiting program")
+        orca_logger.info("程序已退出")
         os._exit(0)
