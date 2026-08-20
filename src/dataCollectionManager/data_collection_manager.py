@@ -74,6 +74,7 @@ class DataCollectionManager:
         self._save_video = False
         self._saving = False
         self._mode = self.DataCollectionMode.TELECONTROL
+        self.inference_ui_message = "推理中..."
         self._shutdown_requested = False
         # self._original_sigint = signal.getsignal(signal.SIGINT)
         # signal.signal(signal.SIGINT, self._sigint_handler)
@@ -329,7 +330,10 @@ class DataCollectionManager:
                         f"Task description: {self.task.get_task_description()}"
                     )
                     self.scene_manager.show_ui_message(
-                        1, "推理中...", "0x00bfff", showtime=0
+                        1,
+                        self.inference_ui_message or "推理中...",
+                        "0x00bfff",
+                        showtime=0,
                     )
 
             elif self.mode == self.DataCollectionMode.AUGMENTATION:

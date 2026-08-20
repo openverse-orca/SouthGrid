@@ -309,6 +309,7 @@ def main() -> None:
     env = manager.env
     manager.save_video = False
     manager.mode = manager.DataCollectionMode.INFERENCE
+    manager.inference_ui_message = "数据恢复中..."
 
     stripped = bool(strip is not None and strip.applied)
     if stripped:
@@ -414,6 +415,12 @@ def main() -> None:
                     orca_logger.info("全部播完，循环重头")
                 else:
                     orca_logger.info("全部播完，退出")
+                    if manager.scene_manager is not None:
+                        manager.scene_manager.show_ui_message(
+                            1, "回放完毕", "0x00ff00", showtime=0
+                        )
+                        env.render()
+                        time.sleep(1.5)
                     break
 
             parquet_path = ep_files[ep_idx]
