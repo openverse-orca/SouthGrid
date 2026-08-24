@@ -15,21 +15,23 @@
 3. 请确认 G1 OmniPicker 与场景物体已正确加载。
 4. 请确认 `src/examples/dataCollection/common/example.yaml` 中的 `level_name` 与 OrcaLab 里的场景名称一致（默认均为 `"example"`）。
 
-### 配置三路相机
+### 配置两路相机
 
-打开布局后，请在 OrcaLab 中手动配置以下两路相机（两个场景配置相同）：
+打开布局后，请在 OrcaLab 中手动配置以下两路相机（两个任务均使用相同的目标映射）：
 
-| 相机位置 | OrcaLab 中的相机名称 | Color Port |
-|----------|----------------------|------------|
-| 右腕 | `camera_wrist_r_color` | 7080 |
-| 头部 | `camera_head_color` | 7090 |
+| 相机位置 | 布局中的相机实体 | 代码中的相机名称 | Color Port |
+|----------|------------------|--------------------|------------|
+| 右腕 | `camera_right` | `camera_wrist_r_color` | 7080 |
+| 头部 | `camera_head` | `camera_head_color` | 7090 |
+
+默认采集链路只使用上表两路相机，布局中的左腕相机不参与默认采集。
 
 对每路相机执行以下操作：
 
 1. 请勾选 **UseNvEnc**。
 2. 请勾选 **Color Camera**。
 3. 请将 **Color Port** 改为上表中对应的端口号。
-4. 三路全部配完后，再统一勾选 **IsRecording**。
+4. 两路全部配完后，再统一勾选 **IsRecording**。
 
 ### 启动仿真
 
@@ -296,7 +298,7 @@ LeRobot v2.1 格式如下：
 - 已在 OrcaLab 中加载对应场景布局（`src/examples/dataCollection/g1_omnipicker/g1_tool.json` 或 `src/examples/dataCollection/g1_omnipicker/g1_button.json`）。
 - `src/examples/dataCollection/common/example.yaml` 中的 `level_name` 与场景名称一致。
 - OrcaGym 服务在 `localhost:50051` 已就绪。
-- 三路相机端口（`7070` / `7080` / `7090`）均已配置，UseNvEnc、Color Camera、Recording 已按要求启用。
+- 两路相机端口（右腕 `7080`、头部 `7090`）均已配置，UseNvEnc、Color Camera、IsRecording 已按要求启用。
 - NVIDIA 驱动与 PyAV/FFmpeg 支持 `av1_nvenc`。
 - 输出目录可写且磁盘空间充足。
 
@@ -304,7 +306,7 @@ LeRobot v2.1 格式如下：
 
 ## 故障排查
 
-**现象**：相机超时或连接失败。**原因**：端口未按上表配置，或 Recording 未勾选。**处理**：请重新配置三路相机，确认端口号与推流状态。
+**现象**：相机超时或连接失败。**原因**：端口未按上表配置，或 IsRecording 未勾选。**处理**：请重新配置右腕和头部两路相机，确认端口号与推流状态。
 
 **现象**：续采后机器人不动。**原因**：手柄已连接但尚未开始采集。**处理**：请再按一次左侧握键进入采集。
 
