@@ -421,12 +421,12 @@
                                 },
                                 {
                                     "name": "ColorPort",
-                                    "value": 7080,
+                                    "value": 7090,
                                     "type": "int"
                                 },
                                 {
                                     "name": "DepthPort",
-                                    "value": 7081,
+                                    "value": 7091,
                                     "type": "int"
                                 },
                                 {
@@ -623,6 +623,16 @@
                                     "name": "UseNvEnc",
                                     "value": true,
                                     "type": "bool"
+                                },
+                                {
+                                    "name": "ColorPort",
+                                    "value": 7080,
+                                    "type": "int"
+                                },
+                                {
+                                    "name": "DepthPort",
+                                    "value": 7081,
+                                    "type": "int"
                                 },
                                 {
                                     "name": "Enable",
