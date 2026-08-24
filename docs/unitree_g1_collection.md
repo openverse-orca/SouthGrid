@@ -222,7 +222,6 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot.py \
     --task_config example.yaml \
     --agent_name g1_pick \
     --waypoint_files my_waypoint_button/my_waypoint_button1.yaml,my_waypoint_button/my_waypoint_button2.yaml,my_waypoint_button/my_waypoint_button3.yaml,my_waypoint_button/my_waypoint_button4.yaml \
-    --task "按红色按钮" \
     --lerobot_out $HOME/southgrid_datasets/g1_osc_buttons \
     --repo_id local/g1_pick_osc_buttons \
     --num_episodes 1 \
@@ -243,15 +242,24 @@ OMP_NUM_THREADS=1 python g1_pick_osc_collection_scripted_lerobot.py \
     --track_clamp 0.08
 ```
 
-四个 `my_waypoint_button` 文件会按命令中的顺序拼接，在同一个 episode 内依次执行，共包含 12 个路点段。相对路径同样以脚本目录为基准，因此必须保留 `my_waypoint_button/` 前缀。
+四个 `my_waypoint_button` 文件分别定义一条按钮轨迹，每个文件都在 YAML 顶层声明自己的 `button_color` 和 `task`：
+
+| 路点文件 | 按钮颜色 | 写入的 task prompt |
+|----------|----------|--------------------|
+| `my_waypoint_button1.yaml` | 红色 | `按红色按钮` |
+| `my_waypoint_button2.yaml` | 绿色 | `按绿色按钮` |
+| `my_waypoint_button3.yaml` | 黄色 | `按黄色按钮` |
+| `my_waypoint_button4.yaml` | 蓝色 | `按蓝色按钮` |
+
+带 `task` 的每个路点文件会单独生成 episode，脚本在该集开始前写入对应 prompt。上面的命令设置 `--num_episodes 1`，因此会依次保存红、绿、黄、蓝共 4 个 episode；设置为 `2` 时，每个按钮重复 2 集，共保存 8 集。按钮任务不需要再传入 `--task`。相对路径仍以脚本目录为基准，因此必须保留 `my_waypoint_button/` 前缀。
 
 | 参数 | 含义 | 默认值 | 使用建议 |
 |------|------|--------|----------|
-| `--waypoint_files` | 逗号分隔的路点 YAML | `waypoint_tool/my_waypoint_tool1.yaml` | 工具或按钮路点按给定顺序在同一集内依次执行 |
+| `--waypoint_files` | 逗号分隔的路点 YAML | `waypoint_tool/my_waypoint_tool1.yaml` | 带 `task` 的文件分别生成 episode；全部不带 `task` 时按顺序组成同一集；两种文件不能混用 |
 | `--lerobot_out` | LeRobot 数据集输出目录 | 无；非 dry-run 必须指定 | 每个数据集使用独立目录 |
 | `--repo_id` | 数据集仓库名 | `local/g1_pick_osc_scripted` | 可按任务修改 |
-| `--task` | 数据集语言指令 | `按红色按钮` | 必须与实际轨迹一致 |
-| `--num_episodes` | 采集 episode 数 | `1` | 脚本不随机化，多集轨迹基本相同 |
+| `--task` | YAML 未声明 `task` 时使用的语言指令 | `整理工具` | 工具等普通路点必须与实际轨迹一致；按钮 YAML 使用自身的 `task` |
+| `--num_episodes` | 每条轨迹重复采集的 episode 数 | `1` | 四个按钮文件的总集数为 `4 × num_episodes` |
 | `--fps` | 数据采集帧率 | `20` | 一般保持 20 |
 | `--clock` | `sim` 或 `wall` | `sim` | 脚本化采集推荐 `sim` |
 | `--resume` | 追加到已有数据集 | 未启用 | 续采时追加 |

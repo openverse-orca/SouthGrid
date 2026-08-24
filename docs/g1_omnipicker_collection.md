@@ -107,6 +107,7 @@ python g1_omnipicker_collection_scripted_button_lerobot.py \
 说明：
 
 - `--counts` 参数的顺序为红、绿、黄、蓝，例如 `25,25,25,25` 表示每种颜色各采 25 集。
+- 每种颜色的 task prompt 由 `pose_g1_button_candidates.yaml` 中对应按钮的 `task` 提供，脚本会在每个 episode 开始前自动写入 `按红色按钮`、`按绿色按钮`、`按黄色按钮` 或 `按蓝色按钮`，无需传入 `--task`。
 - 交互式终端会由脚本询问各颜色集数。非交互终端若不传入 `--counts`，脚本将按红、绿、黄、蓝各 5 集执行。
 - 候选位姿文件默认为同目录的 `pose_g1_button_candidates.yaml`，可通过 `--pose_candidates` 指定其它文件。
 - 断点续采时请追加 `--resume`。

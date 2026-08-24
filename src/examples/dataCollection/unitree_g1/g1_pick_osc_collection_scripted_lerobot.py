@@ -2,8 +2,7 @@
 
 脚本将路点 YAML 插值为右臂与右夹爪轨迹，并在每集结束后保存数据。
 YAML 的 segments 包含 r_target_b、r_quat_b、gripper_r 和 steps；steps 按
-控制步计（env.dt = time_step × frame_skip）。多个文件用逗号分隔，并按给定
-顺序在同一集内依次执行。
+控制步计（env.dt = time_step × frame_skip）。
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import argparse
 import os
 import sys
 import time
-import traceback
 
 import numpy as np
 from yaml import Loader, load, safe_load
@@ -79,7 +77,7 @@ orca_logger = get_orca_logger(
 )
 
 
-def _load_waypoint_segments(path: str) -> tuple[float, float, list[dict]]:
+def _load_waypoint_segments(path: str) -> tuple[float, float, list[dict], str | None]:
     """读 record_waypoints.py 输出的 YAML，转成 build_segmented_trajectory 的段列表。"""
     with open(path, "r", encoding="utf-8") as f:
         spec = safe_load(f) or {}
@@ -112,7 +110,87 @@ def _load_waypoint_segments(path: str) -> tuple[float, float, list[dict]]:
                 "gripper_r": str(seg.get("gripper_r", "open")).strip().lower(),
             }
         )
-    return g_open, g_close, out
+    task = str(spec.get("task", "")).strip() or None
+    return g_open, g_close, out, task
+
+
+def _build_episode_template(
+    waypoint_group: list[tuple[str, float, float, list[dict], str | None]],
+    default_task: str,
+    steps_override: int,
+    speed: float,
+    settle_steps: int,
+    hold_steps: int,
+) -> dict:
+    g_open = waypoint_group[0][1]
+    g_close = waypoint_group[0][2]
+    task_prompt = waypoint_group[0][4] or default_task
+    pairs: list[tuple[dict, str]] = []
+
+    for path, f_open, f_close, segments, _ in waypoint_group:
+        if (f_open, f_close) != (g_open, g_close):
+            orca_logger.warning(
+                f"{path}: gripper_open/close 与首个文件不一致，沿用首个文件的量程"
+            )
+        for i, source_segment in enumerate(segments):
+            segment = dict(source_segment)
+            raw_steps = steps_override if steps_override > 0 else int(segment["steps"])
+            segment["steps"] = max(1, int(round(raw_steps / speed)))
+            pairs.append(
+                (
+                    segment,
+                    f"{os.path.basename(path)} 路点 {i + 1}/{len(segments)}"
+                    f" → gripper_r={segment['gripper_r']}",
+                )
+            )
+
+    all_pairs: list[tuple[dict, str]] = []
+    prev_grip = "open"
+    for segment, label in pairs:
+        grip = segment["gripper_r"]
+        if settle_steps > 0 and grip != prev_grip and all_pairs:
+            all_pairs.append(
+                (
+                    {
+                        "steps": settle_steps,
+                        "l_hold": True,
+                        "r_hold": True,
+                        "gripper_r": prev_grip,
+                    },
+                    f"沉降 {settle_steps} 步（保持 {prev_grip}，等跟到位再动夹爪）",
+                )
+            )
+        all_pairs.append((segment, label))
+        prev_grip = grip
+
+    if hold_steps > 0:
+        all_pairs.append(
+            (
+                {
+                    "steps": hold_steps,
+                    "l_hold": True,
+                    "r_hold": True,
+                    "gripper_r": "hold",
+                },
+                "末尾保持（等夹爪沉降）",
+            )
+        )
+
+    waypoint_marks: dict[int, str] = {}
+    total_steps = 0
+    for segment, label in all_pairs:
+        waypoint_marks[total_steps] = label
+        total_steps += int(segment["steps"])
+
+    return {
+        "task": task_prompt,
+        "paths": [item[0] for item in waypoint_group],
+        "segments": [segment for segment, _ in all_pairs],
+        "waypoint_marks": waypoint_marks,
+        "g_open": g_open,
+        "g_close": g_close,
+        "total_steps": total_steps,
+    }
 
 
 class G1OscScriptedDevice(AbstractDevice):
@@ -234,7 +312,7 @@ def main() -> None:
     parser.add_argument(
         "--waypoint_files",
         default=os.path.join(base_dir, "waypoint_tool", "my_waypoint_tool1.yaml"),
-        help="路点 YAML 路径，逗号分隔可传多个，按顺序在同一集内依次执行",
+        help="带 task 的路点文件分别作为独立 episode；不带 task 的多个文件按顺序在同一集执行",
     )
     parser.add_argument(
         "--lerobot_out",
@@ -247,12 +325,17 @@ def main() -> None:
         help="LeRobot repo_id（默认 local/g1_pick_osc_scripted）",
     )
     parser.add_argument(
-        "--task", default="按红色按钮", help="任务语言描述（写入 LeRobot 元数据）"
+        "--task",
+        default="整理工具",
+        help="路点 YAML 未提供 task 时使用的任务语言描述",
     )
-    parser.add_argument("--num_episodes", type=int, default=1, help="采集集数（默认 1）")
     parser.add_argument(
-        "--fps", type=int, default=20, help="采集帧率（默认 20）"
+        "--num_episodes",
+        type=int,
+        default=1,
+        help="每条轨迹重复采集的 episode 数（默认 1）",
     )
+    parser.add_argument("--fps", type=int, default=20, help="采集帧率（默认 20）")
     parser.add_argument(
         "--clock",
         choices=("sim", "wall"),
@@ -395,84 +478,54 @@ def main() -> None:
         else None
     )
 
-    # ── 路点加载与启动前校验 ──────────────────────────────────────────────
     wp_paths = [p.strip() for p in str(args.waypoint_files).split(",") if p.strip()]
     if not wp_paths:
         parser.error("--waypoint_files 不能为空")
     wp_paths = [p if os.path.isabs(p) else os.path.join(base_dir, p) for p in wp_paths]
 
-    pairs: list[tuple[dict, str]] = []
-    g_open = g_close = None
+    loaded_waypoints: list[tuple[str, float, float, list[dict], str | None]] = []
     try:
         for path in wp_paths:
-            f_open, f_close, segs = _load_waypoint_segments(path)
-            if g_open is None:
-                g_open, g_close = f_open, f_close
-            elif (f_open, f_close) != (g_open, g_close):
-                orca_logger.warning(
-                    f"{path}: gripper_open/close 与首个文件不一致，沿用首个文件的量程"
-                )
-            for i, seg in enumerate(segs):
-                raw_steps = int(args.steps) if args.steps > 0 else int(seg["steps"])
-                seg["steps"] = max(1, int(round(raw_steps / float(args.speed))))
-                pairs.append(
-                    (
-                        seg,
-                        f"{os.path.basename(path)} 路点 {i + 1}/{len(segs)}"
-                        f" → gripper_r={seg['gripper_r']}",
-                    )
-                )
+            f_open, f_close, segments, waypoint_task = _load_waypoint_segments(path)
+            loaded_waypoints.append((path, f_open, f_close, segments, waypoint_task))
+        task_flags = [item[4] is not None for item in loaded_waypoints]
+        if any(task_flags) and not all(task_flags):
+            raise ValueError(
+                "同一命令中的路点 YAML 必须全部包含 task，或全部不包含 task"
+            )
     except Exception as e:
         orca_logger.error(f"路点加载失败: {e}")
         print(f"[错误] 路点加载失败: {e}", flush=True)
         return
 
-    # 在夹爪状态切换前插入末端稳定段
-    settle_steps = max(0, int(args.settle_steps))
-    all_pairs: list[tuple[dict, str]] = []
-    prev_grip = "open"
-    for seg, label in pairs:
-        grip = seg["gripper_r"]
-        if settle_steps > 0 and grip != prev_grip and all_pairs:
-            all_pairs.append(
-                (
-                    {
-                        "steps": settle_steps,
-                        "l_hold": True,
-                        "r_hold": True,
-                        "gripper_r": prev_grip,
-                    },
-                    f"沉降 {settle_steps} 步（保持 {prev_grip}，等跟到位再动夹爪）",
-                )
-            )
-        all_pairs.append((seg, label))
-        prev_grip = grip
-
-    if args.hold_steps > 0:
-        all_pairs.append(
-            (
-                {
-                    "steps": int(args.hold_steps),
-                    "l_hold": True,
-                    "r_hold": True,
-                    "gripper_r": "hold",
-                },
-                "末尾保持（等夹爪沉降）",
-            )
+    waypoint_groups = (
+        [[item] for item in loaded_waypoints] if all(task_flags) else [loaded_waypoints]
+    )
+    episode_templates = [
+        _build_episode_template(
+            group,
+            args.task,
+            int(args.steps),
+            float(args.speed),
+            max(0, int(args.settle_steps)),
+            max(0, int(args.hold_steps)),
         )
-
-    all_segments = [seg for seg, _ in all_pairs]
-
-    # 段起始控制步 → 提示文本，device 跨段时打日志
-    waypoint_marks: dict[int, str] = {}
-    total_steps = 0
-    for seg, label in all_pairs:
-        waypoint_marks[total_steps] = label
-        total_steps += int(seg["steps"])
+        for group in waypoint_groups
+    ]
+    episode_plan = [
+        template for template in episode_templates for _ in range(args.num_episodes)
+    ]
+    total_episodes = len(episode_plan)
+    task_summary = " / ".join(dict.fromkeys(item["task"] for item in episode_templates))
     env_dt = float(args.time_step) * int(args.frame_skip)
-    ctrl_steps = total_steps * int(args.action_repeat)
-    duration_s = ctrl_steps * env_dt
-
+    initial_g_open = episode_templates[0]["g_open"]
+    sample_counts = [item["total_steps"] for item in episode_templates]
+    if len(set(sample_counts)) == 1:
+        trajectory_summary = f"每集 {sample_counts[0]} 采样"
+    else:
+        trajectory_summary = (
+            "各集 " + "/".join(str(value) for value in sample_counts) + " 采样"
+        )
     # ── OSC 数值策略（在控制器创建前配置）────────────────────────────────
     install_osc_patches(
         dls_lambda=args.dls_lambda,
@@ -526,15 +579,18 @@ def main() -> None:
 
     print("=" * 62, flush=True)
     print("  G1 Pick OSC 脚本化路点回放采集", flush=True)
-    print(f"  任务: {args.task}", flush=True)
+    print(f"  任务: {task_summary}", flush=True)
     print(f"  路点: {', '.join(os.path.basename(p) for p in wp_paths)}", flush=True)
     print(
-        f"  轨迹: {len(all_segments)} 段 / {total_steps} 采样"
-        f" × repeat={args.action_repeat} = {ctrl_steps} 控制步"
-        f"（约 {duration_s:.1f}s，env.dt={env_dt * 1000:.0f}ms，speed={args.speed:.2f}x）",
+        f"  轨迹: {len(episode_templates)} 条，{trajectory_summary}"
+        f" × repeat={args.action_repeat}（env.dt={env_dt * 1000:.0f}ms，speed={args.speed:.2f}x）",
         flush=True,
     )
-    print(f"  集数: {args.num_episodes}  fps: {args.fps}  clock: {args.clock}", flush=True)
+    print(
+        f"  集数: {total_episodes}（每条轨迹 {args.num_episodes} 集）  "
+        f"fps: {args.fps}  clock: {args.clock}",
+        flush=True,
+    )
     print(
         f"  [配置] DLS λ={args.dls_lambda}  σ_th={args.dls_sigma_th}  null_kp={args.null_kp}",
         flush=True,
@@ -554,11 +610,9 @@ def main() -> None:
         print(f"  相机: {args.cameras}  分辨率: {args.cam_resolution}", flush=True)
         print(f"  输出目录: {lerobot_out}", flush=True)
     print("=" * 62, flush=True)
-
     if args.num_episodes > 1:
         orca_logger.warning(
-            "本脚本不做随机化，多集会得到几乎相同的轨迹；"
-            "需要多样性请录多份路点或后续加入随机化。"
+            "同一路点重复采集会得到近似轨迹；需要多样性时可录制多份路点。"
         )
 
     # ── 场景管理 ──────────────────────────────────────────────────────────────
@@ -750,7 +804,7 @@ def main() -> None:
                 {n: v for n, v in zip(l_gname, g1_pick_osc_conf.gripper_l["init_ctrl"])},
                 Controller2F85Reverse.ControllerType.DATA,
             )
-            l_grip.update_ctrl(np.full(len(l_grip.ctrl_index), g_open, dtype=np.float32))
+            l_grip.update_ctrl(np.full(len(l_grip.ctrl_index), initial_g_open, dtype=np.float32))
             manager.add_controller(l_grip)
 
         orca_logger.info("Adding right gripper controller (DATA)")
@@ -765,7 +819,7 @@ def main() -> None:
             {n: v for n, v in zip(r_gname, g1_pick_osc_conf.gripper_r["init_ctrl"])},
             Controller2F85Reverse.ControllerType.DATA,
         )
-        r_grip.update_ctrl(np.full(len(r_grip.ctrl_index), g_open, dtype=np.float32))
+        r_grip.update_ctrl(np.full(len(r_grip.ctrl_index), initial_g_open, dtype=np.float32))
         manager.add_controller(r_grip)
 
         orca_logger.info("Adding right arm OSC controller")
@@ -838,13 +892,13 @@ def main() -> None:
         if video_started:
             try:
                 env.stop_save_video()
-            except Exception as stop_err:
+            except Exception:
                 orca_logger.warning("相机数据流停止时遇到错误")
         close_cameras(cameras)
         try:
             scene_manager.show_ui_message(1, "", showtime=0)
             env.render()
-        except Exception as ui_err:
+        except Exception:
             orca_logger.warning("界面状态清理未完成")
         try:
             env.close()
@@ -865,6 +919,15 @@ def main() -> None:
     # ── 主循环 ────────────────────────────────────────────────────────────────
     writer = None
     n_saved = 0
+
+    def _discard_pending_episode():
+        if dry_run or writer is None:
+            return
+        try:
+            storage.clear_data()
+        except Exception:
+            orca_logger.warning("当前未保存集未能完整清理")
+
     try:
         if not dry_run:
             writer = LeRobotDatasetWriter.create(
@@ -884,25 +947,31 @@ def main() -> None:
                 camera_map=camera_map,
                 target_hw=cam_hw,
                 writer=writer,
-                task=args.task,
+                task=episode_plan[0]["task"],
                 clock=args.clock,
                 camera_source=args.camera_source,
             )
 
         orca_logger.info(
-            f"开始脚本化采集，共 {args.num_episodes} 集，任务: {args.task}"
+            f"开始脚本化采集，共 {total_episodes} 集，任务: {task_summary}"
         )
 
-        for ep_idx in range(1, args.num_episodes + 1):
-            orca_logger.info(f"========== Episode {ep_idx}/{args.num_episodes} ==========")
+        for ep_idx, episode_template in enumerate(episode_plan, start=1):
+            task_prompt = episode_template["task"]
+            if not dry_run:
+                storage.set_task(task_prompt)
+
+            orca_logger.info(
+                f"========== Episode {ep_idx}/{total_episodes} | {task_prompt} =========="
+            )
             print(
-                f"\n>>> 正在采集第 {ep_idx}/{args.num_episodes} 集 | 任务: {args.task}",
+                f"\n>>> 正在采集第 {ep_idx}/{total_episodes} 集 | 任务: {task_prompt}",
                 flush=True,
             )
             try:
                 scene_manager.show_ui_message(
                     1,
-                    f"采集中: {args.task}  ({ep_idx}/{args.num_episodes})",
+                    f"采集中: {task_prompt}  ({ep_idx}/{total_episodes})",
                     "0x00ff88",
                     showtime=0,
                 )
@@ -913,21 +982,30 @@ def main() -> None:
             time.sleep(0.1)
             if not manager.update_scene():
                 orca_logger.error("update_scene 失败，停止采集")
+                if not dry_run:
+                    _discard_pending_episode()
                 break
             env.set_default_joint_values(default_joint_values)
 
             ep_dir: str | None = None
             ep_start_wall: float | None = None
             if not dry_run and args.camera_source == "mp4":
-                ep_dir = os.path.join(scratch_dir, "mp4", f"ep_{ep_idx:06d}")
+                ep_dir = os.path.join(
+                    scratch_dir,
+                    "mp4",
+                    f"ep_{writer.num_episodes + 1:06d}",
+                )
                 os.makedirs(os.path.join(ep_dir, "video"), exist_ok=True)
                 ep_start_wall = time.perf_counter()
                 env.begin_save_video(ep_dir)
                 video_started = True
 
-            # 从当前末端位姿生成右臂执行轨迹
             _, _, r_pos, r_quat, _, r_gm = scripted.build_segmented_trajectory(
-                env, g1_pick_osc_conf, all_segments, g_open, g_close
+                env,
+                g1_pick_osc_conf,
+                episode_template["segments"],
+                episode_template["g_open"],
+                episode_template["g_close"],
             )
 
             device = G1OscScriptedDevice(
@@ -938,7 +1016,7 @@ def main() -> None:
                 r_pos,
                 r_quat,
                 r_gm,
-                waypoint_marks,
+                episode_template["waypoint_marks"],
                 track_log_every=args.track_log_every,
                 track_ki=args.track_ki,
                 track_clamp=args.track_clamp,
@@ -954,13 +1032,15 @@ def main() -> None:
                 try:
                     env.stop_save_video()
                 except Exception as stop_err:
-                    orca_logger.warning("相机数据流停止时遇到错误")
+                    raise RuntimeError("相机数据流停止失败") from stop_err
                 video_started = False
 
-            if not device.finished:
-                orca_logger.warning(
-                    f"[EP {ep_idx}] 轨迹提前结束，请检查运行状态"
-                )
+            if manager._shutdown_requested or not device.finished:
+                if not dry_run:
+                    _discard_pending_episode()
+                orca_logger.warning(f"[EP {ep_idx}] 轨迹未完整执行，本集已丢弃")
+                print(f">>> 第 {ep_idx} 集未完整执行，已丢弃", flush=True)
+                break
 
             if dry_run:
                 orca_logger.info(
@@ -970,6 +1050,7 @@ def main() -> None:
                 continue
 
             ep_frames = storage.buffered_frame_count
+            committed_before = writer.num_episodes
             storage.save_data(
                 task_info=manager.task.get_task_info(),
                 scene_info=scene_manager.get_scene_info(),
@@ -977,8 +1058,13 @@ def main() -> None:
                 episode_video_dir=ep_dir,
                 ep_start_wall=ep_start_wall,
             )
-            n_saved += 1
-            cap_fps = (ep_frames / ep_dur) if ep_dur > 0 else 0.0
+            committed = writer.num_episodes - committed_before
+            if committed <= 0:
+                orca_logger.warning(f"[EP {ep_idx}] 有效帧不足，本集未保存")
+                print(f">>> 第 {ep_idx} 集有效帧不足，未保存", flush=True)
+                continue
+
+            n_saved += committed
             orca_logger.info(
                 f"[✓] Episode {ep_idx} 已保存：{ep_frames} 帧 / {ep_dur:.1f}s，"
                 f"累计 {writer.num_episodes} 集 / {writer.num_frames} 帧"
@@ -993,9 +1079,10 @@ def main() -> None:
         orca_logger.info("KeyboardInterrupt，停止采集，丢弃当前未保存集")
         print("\n[停止] 采集已中断，丢弃当前未保存集", flush=True)
         if not dry_run:
-            storage.clear_data()
+            _discard_pending_episode()
     except Exception as e:
         orca_logger.error(f"采集异常: {e}")
+        _discard_pending_episode()
     finally:
         if writer is not None:
             try:
@@ -1006,7 +1093,7 @@ def main() -> None:
             except Exception as close_err:
                 orca_logger.error(f"数据集收尾失败: {close_err}")
         if dry_run:
-            summary = f"轨迹回放结束，共 {args.num_episodes} 集（未保存数据）"
+            summary = f"轨迹回放结束，共 {total_episodes} 集（未保存数据）"
         elif writer is not None:
             summary = (
                 f"采集结束，本次保存 {n_saved} 集，"

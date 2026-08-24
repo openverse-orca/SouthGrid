@@ -91,9 +91,26 @@ sudo apt install adb
 - 数据回放需要已有采集数据，并使用与采集时相同的任务布局。
 - 在线推理需要先部署策略服务，再使用与策略任务对应的布局启动推理客户端。
 
+## Task prompt（任务指令）
+
+Task prompt 是描述当前数据所执行任务的自然语言指令，例如 `按红色按钮` 或 `整理工具`。它与 `--task_config` 不同：`--task_config` 指向场景配置 YAML，task prompt 则用于训练和推理时的语言条件。
+
+采集程序会把 task prompt 写入 LeRobot 数据集：完整文本保存在 `meta/tasks.jsonl`，parquet 中每帧的 `task_index` 指向对应文本。因此 prompt 必须与该帧实际执行的任务一致。
+
+- 智元 G1 OmniPicker 四色按钮自动化采集从 `pose_g1_button_candidates.yaml` 读取各颜色的 `task`，每个 episode 自动写入对应颜色的 prompt。
+- 宇树 G1 按钮自动化采集从各 `my_waypoint_button*.yaml` 读取 `task`；每个带 `task` 的路点文件单独生成 episode，并在该集开始前写入对应 prompt。一次传入多个按钮文件可在同一数据集中采集多种颜色，`--num_episodes` 表示每个文件重复采集的集数。
+- 宇树 G1 工具等普通路点 YAML 不提供 `task`，多个文件仍按顺序组成同一个 episode，并使用命令行 `--task` 作为整集 prompt。
+- 两个机器人的 Pico 遥操作采集都使用命令行 `--task`。按钮任务应根据本次采集颜色填写 `按红色按钮`、`按绿色按钮`、`按黄色按钮` 或 `按蓝色按钮`；同一次脚本启动不要混采不同颜色。
+
+示例：
+
+```text
+--task "按红色按钮"
+```
+
 ## 数据输出
 
-采集结果采用 LeRobot v2.1 数据集格式，包含帧数据、任务信息和视频文件。相机、帧率及数据字段由所用采集任务自动写入数据集元信息；训练或集成时请读取数据集内的 `meta/info.json`。
+采集结果采用 LeRobot v2.1 数据集格式，包含帧数据、任务信息和视频文件。相机、帧率及数据字段记录在 `meta/info.json`，task prompt 记录在 `meta/tasks.jsonl`；训练或集成时应同时读取相应元信息。
 
 ## 目录概览
 

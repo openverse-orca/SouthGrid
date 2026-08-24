@@ -1,3 +1,6 @@
+button_color: green
+task: "按绿色按钮"
+
 gripper_open: -1.0
 gripper_close: 2
 

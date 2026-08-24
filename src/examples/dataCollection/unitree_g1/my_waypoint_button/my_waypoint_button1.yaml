@@ -1,3 +1,6 @@
+button_color: red
+task: "按红色按钮"
+
 gripper_open: -1.0
 gripper_close: 2
 
