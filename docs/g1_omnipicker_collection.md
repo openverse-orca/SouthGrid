@@ -293,6 +293,17 @@ LeRobot v2.1 格式如下：
 
 采集程序会为每个任务生成与其控制方式匹配的数据字段。训练、分析或系统集成时，请以数据集内 `meta/info.json` 的元信息为准。
 
+---
+
+## 示例数据
+
+### 示例 VR 自采数据
+
+- 链接：<https://pan.baidu.com/s/1Q0Zoakl4eUYLNwWpzjqajw>
+- 提取码：`5hne`
+
+---
+
 ## 启动前检查
 
 - OrcaLab 版本为 7.3，且 `orca-gym` / `orca-lab` 版本为 26.7.3。
